@@ -1,0 +1,22 @@
+# Data Drift Detection Tutorial
+
+Topic: Detecting and Handling Data Drift in ML Pipelines
+
+## Key Points
+- What is data drift and why it matters for ML models
+- Types of drift: feature drift, concept drift, prediction drift
+- Using statistical tests to detect drift (KS test, PSI)
+- Implementing drift detection with Evidently AI
+- Setting up automated drift monitoring in production
+- Best practices for responding to detected drift
+
+## Demo Requirements
+- Show: Loading a baseline dataset and production data
+- Show: Running drift detection using Evidently
+- Show: Generating a drift report with visualizations
+- Data: Sample customer transaction data with intentional drift
+- Output: HTML drift report, terminal validation output
+
+## Target Audience
+- Data scientists and ML engineers
+- Intermediate level (familiar with Python and basic ML concepts)

@@ -1,0 +1,22 @@
+# Linear Regression Deep Dive
+
+Topic: Understanding and Implementing Linear Regression
+
+## Key Points
+- The math behind linear regression (gradient descent, cost function)
+- Implementing from scratch vs using sklearn
+- Feature scaling and its importance
+- Evaluating model performance (R-squared, MSE, MAE)
+- Handling multicollinearity
+- When to use regularization (Ridge, Lasso)
+
+## Demo Requirements
+- Show: Building regression model step by step
+- Show: Visualizing the fit with matplotlib
+- Show: Comparing with sklearn implementation
+- Data: Housing price dataset with multiple features
+- Output: Model coefficients, performance metrics, scatter plots
+
+## Target Audience
+- Data science beginners
+- Students learning ML fundamentals
