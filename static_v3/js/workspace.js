@@ -105,7 +105,7 @@ function openRecordingStudio() {
     const top = (screen.height - height) / 2;
 
     window.open(
-        '/recording-studio',
+        '/recording',
         'RecordingStudio',
         `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no`
     );
