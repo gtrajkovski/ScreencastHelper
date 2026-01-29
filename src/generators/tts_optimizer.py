@@ -49,10 +49,11 @@ class TTSOptimizer:
     def _apply_replacements(self, text: str) -> str:
         """Apply word/phrase replacements."""
         for original, replacement in self.replacements.items():
-            # Case-insensitive replacement for acronyms
-            if original.isupper():
-                text = re.sub(rf'\b{original}\b', replacement, text)
+            if original.isalpha():
+                # Use word boundaries for pure-alpha terms (acronyms and library names)
+                text = re.sub(rf'\b{re.escape(original)}\b', replacement, text)
             else:
+                # Literal replacement for symbols, punctuation, dotted terms
                 text = text.replace(original, replacement)
         return text
 

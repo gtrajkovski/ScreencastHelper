@@ -2,7 +2,7 @@
 
 let currentEnvironment = 'jupyter';
 let generated = { script: false, tts: false, demo: false, data: false };
-let editMode = false;
+let currentScriptView = 'preview';
 let currentAIContext = 'script';
 let currentSuggestion = '';
 let modificationStatus = {
@@ -125,50 +125,12 @@ function setupQuickActions() {
 // ============================================================
 
 function setupEditMode() {
-    const toggle = document.getElementById('edit-mode-toggle');
-    if (toggle) {
-        toggle.addEventListener('change', (e) => {
-            editMode = e.target.checked;
-            toggleEditMode(editMode);
-        });
-    }
-}
-
-function toggleEditMode(enabled) {
-    const previewElements = ['script-preview', 'tts-preview', 'demo-preview'];
-    const editorElements = ['script-editor', 'tts-editor', 'demo-editor'];
-
-    previewElements.forEach((id, i) => {
-        const preview = document.getElementById(id);
-        const editor = document.getElementById(editorElements[i]);
-
-        if (preview && editor) {
-            if (enabled) {
-                preview.classList.add('hidden');
-                editor.classList.remove('hidden');
-
-                // Populate editor with current content
-                const content = preview.querySelector('pre')?.textContent || '';
-                editor.value = content;
-
-                // Store original for change tracking
-                if (i === 0) originalContent.script = content;
-                if (i === 1) originalContent.tts = content;
-                if (i === 2) originalContent.demo = content;
-            } else {
-                preview.classList.remove('hidden');
-                editor.classList.add('hidden');
-            }
-        }
-    });
-
-    // Track changes in editors
-    ['script-editor', 'tts-editor', 'demo-editor'].forEach(id => {
-        const editor = document.getElementById(id);
-        if (editor) {
-            editor.addEventListener('input', () => handleEditorChange(id));
-        }
-    });
+    // Set up initial word/line counts
+    updateEditorStats('script-editor');
+    updateEditorStats('tts-editor');
+    updateEditorStats('demo-editor');
+    // Initialize script in preview mode
+    setScriptView('preview');
 }
 
 function handleEditorChange(editorId) {
@@ -206,9 +168,37 @@ function handleEditorChange(editorId) {
         }
     }
 
-    // Show propagation warning if script changed
-    if (editorId === 'script-editor' && isModified) {
-        showPropagationWarning();
+    // Update word/line counts
+    updateEditorStats(editorId);
+
+    // Re-render preview if script changed while in preview mode
+    if (editorId === 'script-editor' && currentScriptView === 'preview') {
+        renderScriptPreview();
+    }
+
+    // Mark project unsaved if modified
+    if (isModified) {
+        markProjectModified();
+    }
+}
+
+function updateEditorStats(editorId) {
+    const editor = document.getElementById(editorId);
+    if (!editor) return;
+    const content = editor.value || '';
+
+    if (editorId === 'script-editor') {
+        const words = content.trim().split(/\s+/).filter(w => w).length;
+        const el = document.getElementById('script-words');
+        if (el) el.textContent = words ? `${words} words` : '';
+    } else if (editorId === 'tts-editor') {
+        const words = content.trim().split(/\s+/).filter(w => w).length;
+        const el = document.getElementById('tts-words');
+        if (el) el.textContent = words ? `${words} words` : '';
+    } else if (editorId === 'demo-editor') {
+        const lines = content.split('\n').length;
+        const el = document.getElementById('demo-lines');
+        if (el) el.textContent = content ? `${lines} lines` : '';
     }
 }
 
@@ -230,6 +220,13 @@ async function saveArtifact(artifactType) {
     const editor = document.getElementById(editorId);
     const content = editor?.value || '';
 
+    // Show saving status
+    const statusEl = document.getElementById(statusId);
+    if (statusEl) {
+        statusEl.textContent = '⏳ Saving...';
+        statusEl.className = 'sync-status saving';
+    }
+
     try {
         const response = await fetch('/api/update-artifact', {
             method: 'POST',
@@ -243,15 +240,11 @@ async function saveArtifact(artifactType) {
         const data = await response.json();
 
         if (data.success) {
-            // Update status
-            const statusEl = document.getElementById(statusId);
             if (statusEl) {
                 statusEl.textContent = '✓ Saved';
-                statusEl.classList.remove('modified');
-                statusEl.classList.add('synced');
+                statusEl.className = 'sync-status synced';
             }
 
-            // Update original content
             if (artifactType === 'narration_script.md') {
                 originalContent.script = content;
             } else if (artifactType === 'narration_tts.txt') {
@@ -260,21 +253,18 @@ async function saveArtifact(artifactType) {
 
             modificationStatus[artifactType] = false;
 
-            // Update preview
-            const previewId = artifactType === 'narration_script.md' ? 'script-preview' : 'tts-preview';
-            const preview = document.getElementById(previewId);
-            if (preview) {
-                preview.innerHTML = `<pre>${escapeHtml(content)}</pre>`;
-            }
-
-            addChatMessage('system', `✅ ${artifactType} saved`);
-
-            // Check if propagation needed
-            if (data.needs_update && data.needs_update.length > 0) {
-                showPropagationWarning();
+            // If script was saved, offer to update TTS
+            if (artifactType === 'narration_script.md') {
+                showUpdateToast();
+            } else {
+                addChatMessage('system', `✅ ${artifactType} saved`);
             }
         }
     } catch (error) {
+        if (statusEl) {
+            statusEl.textContent = '● Modified';
+            statusEl.className = 'sync-status modified';
+        }
         addChatMessage('assistant', `❌ Error saving: ${error.message}`);
     }
 }
@@ -283,9 +273,14 @@ async function saveCurrentDemo() {
     const editor = document.getElementById('demo-editor');
     const content = editor?.value || '';
 
-    // Determine demo filename based on environment
     const demoKey = currentEnvironment === 'jupyter' ? 'demo.ipynb' :
                     currentEnvironment === 'terminal' ? 'demo.sh' : 'demo.py';
+
+    const statusEl = document.getElementById('demo-sync-status');
+    if (statusEl) {
+        statusEl.textContent = '⏳ Saving...';
+        statusEl.className = 'sync-status saving';
+    }
 
     try {
         const response = await fetch('/api/update-artifact', {
@@ -300,25 +295,303 @@ async function saveCurrentDemo() {
         const data = await response.json();
 
         if (data.success) {
-            const statusEl = document.getElementById('demo-sync-status');
             if (statusEl) {
                 statusEl.textContent = '✓ Saved';
-                statusEl.classList.remove('modified');
-                statusEl.classList.add('synced');
+                statusEl.className = 'sync-status synced';
             }
             originalContent.demo = content;
             modificationStatus.demo = false;
 
-            // Update preview
-            const preview = document.getElementById('demo-preview');
-            if (preview) {
-                preview.innerHTML = `<div class="demo-badge">${demoKey}</div><pre>${escapeHtml(content)}</pre>`;
-            }
-
+            document.getElementById('demo-type-badge').textContent = demoKey;
             addChatMessage('system', `✅ ${demoKey} saved`);
         }
     } catch (error) {
+        if (statusEl) {
+            statusEl.textContent = '● Modified';
+            statusEl.className = 'sync-status modified';
+        }
         addChatMessage('assistant', `❌ Error saving: ${error.message}`);
+    }
+}
+
+// ============================================================
+// Auto-Update Propagation (Script → TTS)
+// ============================================================
+
+function showUpdateToast() {
+    const toast = document.getElementById('update-toast');
+    if (toast) toast.style.display = 'flex';
+}
+
+function dismissToast() {
+    const toast = document.getElementById('update-toast');
+    if (toast) toast.style.display = 'none';
+    addChatMessage('system', '✅ Script saved. TTS not updated.');
+}
+
+async function confirmAutoUpdate() {
+    const toast = document.getElementById('update-toast');
+    if (toast) toast.style.display = 'none';
+
+    // Show syncing status on TTS
+    const statusEl = document.getElementById('tts-sync-status');
+    if (statusEl) {
+        statusEl.textContent = '🔄 Syncing...';
+        statusEl.className = 'sync-status syncing';
+    }
+
+    addChatMessage('system', '🔄 Regenerating TTS from updated script...');
+
+    try {
+        const response = await fetch('/api/propagate-changes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source: 'narration_script.md',
+                targets: ['narration_tts.txt']
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Reload TTS content from server
+            const artResponse = await fetch('/api/get-artifacts');
+            const artData = await artResponse.json();
+
+            if (artData.success && artData.artifacts) {
+                const newTts = artData.artifacts['narration_tts.txt'] || '';
+                document.getElementById('tts-editor').value = newTts;
+                originalContent.tts = newTts;
+                modificationStatus['narration_tts.txt'] = false;
+                updateEditorStats('tts-editor');
+            }
+
+            if (statusEl) {
+                statusEl.textContent = '✓ Saved';
+                statusEl.className = 'sync-status synced';
+            }
+            addChatMessage('system', '✅ TTS updated from script!');
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = '● Modified';
+            statusEl.className = 'sync-status modified';
+        }
+        addChatMessage('assistant', `❌ TTS update failed: ${err.message}`);
+    }
+}
+
+async function regenerateFromScript() {
+    if (!confirm('Regenerate TTS from the current script? This will overwrite your TTS edits.')) return;
+    await confirmAutoUpdate();
+}
+
+// ============================================================
+// AI Suggestions System
+// ============================================================
+
+let currentSuggestionsTarget = 'narration_script.md';
+
+function reviewContent(target) {
+    currentSuggestionsTarget = target;
+    const targetLabel = document.getElementById('suggestions-target');
+    const names = {
+        'narration_script.md': 'Script',
+        'narration_tts.txt': 'TTS',
+    };
+    if (targetLabel) targetLabel.textContent = `(${names[target] || target})`;
+    document.getElementById('suggestions-panel').style.display = 'block';
+    fetchSuggestions();
+}
+
+function reviewDemoContent() {
+    const demoKey = currentEnvironment === 'jupyter' ? 'demo.ipynb' :
+                    currentEnvironment === 'terminal' ? 'demo.sh' : 'demo.py';
+    currentSuggestionsTarget = demoKey;
+    const targetLabel = document.getElementById('suggestions-target');
+    if (targetLabel) targetLabel.textContent = '(Demo)';
+    document.getElementById('suggestions-panel').style.display = 'block';
+    fetchSuggestions();
+}
+
+function refreshSuggestions() {
+    fetchSuggestions();
+}
+
+function closeSuggestionsPanel() {
+    document.getElementById('suggestions-panel').style.display = 'none';
+}
+
+async function fetchSuggestions() {
+    const listEl = document.getElementById('suggestions-list');
+    const focus = document.getElementById('suggestion-focus')?.value || 'general';
+
+    listEl.innerHTML = '<div class="suggestions-loading"><div class="spinner"></div><div>Analyzing content...</div></div>';
+
+    try {
+        const response = await fetch('/api/get-suggestions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target: currentSuggestionsTarget,
+                focus: focus
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            renderSuggestionCards(result.suggestions);
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        listEl.innerHTML = `<div class="suggestions-loading"><div>Error: ${err.message}</div><button onclick="fetchSuggestions()" class="btn btn-sm" style="margin-top:10px">Try Again</button></div>`;
+    }
+}
+
+function renderSuggestionCards(suggestions) {
+    const listEl = document.getElementById('suggestions-list');
+
+    if (!suggestions || suggestions.length === 0) {
+        listEl.innerHTML = '<div class="suggestions-loading"><div>No suggestions - looking good!</div></div>';
+        return;
+    }
+
+    listEl.innerHTML = suggestions.map((s, i) => {
+        const id = s.id || String(i);
+        const escapedSuggestion = encodeURIComponent(s.suggestion || '');
+        return `
+        <div class="suggestion-card" data-id="${id}" data-suggestion="${escapedSuggestion}">
+            <div class="suggestion-card-header">
+                <span class="suggestion-type ${s.type || 'improvement'}">${s.type || 'improvement'}</span>
+                <span class="suggestion-section">${s.section || 'general'}</span>
+                <span class="suggestion-priority ${s.priority || 'medium'}">${s.priority || 'medium'}</span>
+            </div>
+            ${s.issue ? `<div class="suggestion-issue">${escapeHtml(s.issue)}</div>` : ''}
+            <div class="suggestion-text">${escapeHtml(s.suggestion || '')}</div>
+            <div class="suggestion-actions">
+                <button class="btn-accept" onclick="acceptSuggestionCard('${id}')">✓ Accept</button>
+                <button class="btn-dismiss-card" onclick="dismissSuggestionCard('${id}')">✕ Dismiss</button>
+                <button class="btn-edit-card" onclick="editSuggestionCard('${id}')">✏️ Edit</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function acceptSuggestionCard(id) {
+    const card = document.querySelector(`.suggestion-card[data-id="${id}"]`);
+    if (!card) return;
+
+    const suggestion = decodeURIComponent(card.dataset.suggestion);
+    const actionsEl = card.querySelector('.suggestion-actions');
+    const originalActions = actionsEl.innerHTML;
+    actionsEl.innerHTML = '<span class="suggestion-implementing">Implementing...</span>';
+
+    try {
+        const response = await fetch('/api/implement-suggestion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                suggestion: suggestion,
+                target: currentSuggestionsTarget,
+                action: 'improve'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Update the editor with the new content
+            const editorMap = {
+                'narration_script.md': 'script-editor',
+                'narration_tts.txt': 'tts-editor'
+            };
+            let editorId = editorMap[result.target];
+            if (!editorId && result.target.startsWith('demo.')) {
+                editorId = 'demo-editor';
+            }
+
+            if (editorId) {
+                const editor = document.getElementById(editorId);
+                if (editor) {
+                    editor.value = result.updated_content;
+                    handleEditorChange(editorId);
+                }
+            }
+
+            card.classList.add('accepted');
+            actionsEl.innerHTML = '<span class="suggestion-applied">✓ Applied!</span>';
+
+            // Fade out card
+            setTimeout(() => {
+                card.style.transition = 'all 0.3s';
+                card.style.opacity = '0';
+                card.style.maxHeight = '0';
+                card.style.padding = '0';
+                card.style.margin = '0';
+                card.style.overflow = 'hidden';
+                setTimeout(() => card.remove(), 300);
+            }, 1500);
+
+            addChatMessage('system', `💡 Suggestion applied to ${result.target}`);
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        actionsEl.innerHTML = originalActions;
+        addChatMessage('assistant', `❌ Failed to apply suggestion: ${err.message}`);
+    }
+}
+
+function dismissSuggestionCard(id) {
+    const card = document.querySelector(`.suggestion-card[data-id="${id}"]`);
+    if (card) {
+        card.style.transition = 'all 0.3s';
+        card.style.opacity = '0';
+        card.style.maxHeight = '0';
+        card.style.overflow = 'hidden';
+        setTimeout(() => card.remove(), 300);
+    }
+}
+
+function editSuggestionCard(id) {
+    const card = document.querySelector(`.suggestion-card[data-id="${id}"]`);
+    if (!card) return;
+
+    const textEl = card.querySelector('.suggestion-text');
+    const currentText = textEl.textContent;
+
+    textEl.innerHTML = `<textarea class="suggestion-edit-area">${currentText}</textarea>`;
+
+    const textarea = textEl.querySelector('textarea');
+    textarea.focus();
+    textarea.addEventListener('input', () => {
+        card.dataset.suggestion = encodeURIComponent(textarea.value);
+    });
+
+    const editBtn = card.querySelector('.btn-edit-card');
+    editBtn.textContent = '✓ Done';
+    editBtn.onclick = () => {
+        const newText = textarea.value;
+        textEl.textContent = newText;
+        card.dataset.suggestion = encodeURIComponent(newText);
+        editBtn.textContent = '✏️ Edit';
+        editBtn.onclick = () => editSuggestionCard(id);
+    };
+}
+
+async function acceptAllSuggestions() {
+    const cards = document.querySelectorAll('.suggestion-card:not(.accepted)');
+    if (cards.length === 0) return;
+    if (!confirm(`Apply all ${cards.length} suggestions sequentially?`)) return;
+
+    for (const card of cards) {
+        await acceptSuggestionCard(card.dataset.id);
+        await new Promise(r => setTimeout(r, 500));
     }
 }
 
@@ -363,15 +636,11 @@ async function propagateChanges(target) {
             const artifacts = await artifactsResponse.json();
 
             if (artifacts.success && artifacts.artifacts[target]) {
-                // Update TTS preview/editor
+                // Update TTS editor
                 if (target === 'narration_tts.txt') {
-                    const preview = document.getElementById('tts-preview');
                     const editor = document.getElementById('tts-editor');
                     const content = artifacts.artifacts[target];
 
-                    if (preview) {
-                        preview.innerHTML = `<div class="tts-notice">✓ TTS Optimized</div><pre>${escapeHtml(content)}</pre>`;
-                    }
                     if (editor) {
                         editor.value = content;
                     }
@@ -409,15 +678,21 @@ function setupSectionTabs() {
 }
 
 function filterScriptSection(section) {
-    const editor = document.getElementById('script-editor');
-    const preview = document.getElementById('script-preview');
-
     if (section === 'all') {
-        // Show all content
+        if (currentScriptView === 'preview') {
+            const preview = document.getElementById('script-preview');
+            if (preview) preview.scrollTop = 0;
+        } else {
+            const editor = document.getElementById('script-editor');
+            if (editor) editor.scrollTop = 0;
+        }
         return;
     }
 
-    // Scroll to section in editor/preview
+    jumpToSection(section);
+}
+
+function jumpToSection(section) {
     const sectionMap = {
         'hook': '## HOOK',
         'objective': '## OBJECTIVE',
@@ -427,17 +702,82 @@ function filterScriptSection(section) {
     };
 
     const marker = sectionMap[section];
-    if (marker && editor && editMode) {
+    if (!marker) return;
+
+    if (currentScriptView === 'preview') {
+        const preview = document.getElementById('script-preview');
+        if (!preview) return;
+        const heading = preview.querySelector(`[data-section="${section}"]`);
+        if (heading) {
+            heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            heading.classList.add('section-highlight');
+            setTimeout(() => heading.classList.remove('section-highlight'), 1500);
+        }
+    } else {
+        const editor = document.getElementById('script-editor');
+        if (!editor) return;
         const content = editor.value;
         const index = content.indexOf(marker);
         if (index !== -1) {
             editor.focus();
             editor.setSelectionRange(index, index);
-            // Scroll to position
             const lineHeight = 20;
             const lines = content.substring(0, index).split('\n').length;
             editor.scrollTop = lines * lineHeight - 100;
         }
+    }
+}
+
+function setScriptView(view) {
+    currentScriptView = view;
+    const editor = document.getElementById('script-editor');
+    const preview = document.getElementById('script-preview');
+    const toggleBtns = document.querySelectorAll('#script-view-toggle .view-btn');
+
+    toggleBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === view);
+    });
+
+    if (view === 'preview') {
+        editor.style.display = 'none';
+        preview.style.display = 'block';
+        renderScriptPreview();
+    } else {
+        preview.style.display = 'none';
+        editor.style.display = 'block';
+        editor.focus();
+    }
+}
+
+function renderScriptPreview() {
+    const editor = document.getElementById('script-editor');
+    const preview = document.getElementById('script-preview');
+    if (!editor || !preview) return;
+
+    const rawText = editor.value;
+    if (!rawText.trim()) {
+        preview.innerHTML = '<p class="empty-state">Narration script will appear here. Click \'Generate Package\' to create content.</p>';
+        return;
+    }
+
+    // Configure marked for safe rendering
+    if (typeof marked !== 'undefined') {
+        let html = marked.parse(rawText);
+
+        // Style visual cues: [click here], [scroll down], etc.
+        html = html.replace(/\[PAUSE\]/g, '<span class="visual-cue pause-marker">[PAUSE]</span>');
+        html = html.replace(/\[([^\]]+)\]/g, '<span class="visual-cue">[$1]</span>');
+
+        // Add data-section attributes to section headings
+        html = html.replace(/<h2[^>]*>(HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION|CTA)[^<]*<\/h2>/gi, (match, section) => {
+            const sectionKey = section.toLowerCase().replace('call to action', 'cta');
+            return match.replace('<h2', `<h2 data-section="${sectionKey}"`);
+        });
+
+        preview.innerHTML = html;
+    } else {
+        // Fallback if marked.js not loaded
+        preview.innerHTML = '<pre>' + rawText.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
     }
 }
 
@@ -517,14 +857,11 @@ async function executeAIAction(action) {
     // Get current content based on context
     let content = '';
     if (currentAIContext === 'script') {
-        content = document.getElementById('script-editor')?.value ||
-                  document.getElementById('script-preview')?.textContent || '';
+        content = document.getElementById('script-editor')?.value || '';
     } else if (currentAIContext === 'tts') {
-        content = document.getElementById('tts-editor')?.value ||
-                  document.getElementById('tts-preview')?.textContent || '';
+        content = document.getElementById('tts-editor')?.value || '';
     } else if (currentAIContext === 'demo') {
-        content = document.getElementById('demo-editor')?.value ||
-                  document.getElementById('demo-preview')?.textContent || '';
+        content = document.getElementById('demo-editor')?.value || '';
     }
 
     // Add user message
@@ -641,15 +978,6 @@ function applySuggestion() {
 
     const editor = document.getElementById(editorId);
     if (editor) {
-        // Enable edit mode if not already
-        if (!editMode) {
-            const toggle = document.getElementById('edit-mode-toggle');
-            if (toggle) {
-                toggle.checked = true;
-                toggleEditMode(true);
-            }
-        }
-
         editor.value = currentSuggestion;
         handleEditorChange(editorId);
 
@@ -808,7 +1136,7 @@ async function generatePackage() {
         const data = await response.json();
 
         if (data.success) {
-            // Update previews and editors
+            // Update editors directly
             const scriptContent = data.artifacts['narration_script.md'] || '';
             const ttsContent = data.artifacts['narration_tts.txt'] || '';
 
@@ -816,25 +1144,34 @@ async function generatePackage() {
                            currentEnvironment === 'terminal' ? 'demo.sh' : 'demo.py';
             const demoContent = data.artifacts[demoKey] || data.artifacts['demo.py'] || '';
 
-            // Update script
-            document.getElementById('script-preview').innerHTML = `<pre>${escapeHtml(scriptContent)}</pre>`;
+            // Update script editor
             document.getElementById('script-editor').value = scriptContent;
             originalContent.script = scriptContent;
 
-            // Update TTS
-            document.getElementById('tts-preview').innerHTML =
-                `<div class="tts-notice">✓ TTS Optimized: Removed visual cues, expanded acronyms</div>
-                 <pre>${escapeHtml(ttsContent)}</pre>`;
+            // Update TTS editor
             document.getElementById('tts-editor').value = ttsContent;
             originalContent.tts = ttsContent;
 
-            // Update Demo
-            document.getElementById('demo-preview').innerHTML =
-                `<div class="demo-badge">${demoKey}</div>
-                 <pre>${escapeHtml(demoContent)}</pre>`;
+            // Update Demo editor
             document.getElementById('demo-editor').value = demoContent;
             document.getElementById('demo-type-badge').textContent = demoKey;
             originalContent.demo = demoContent;
+
+            // Update word/line counts
+            updateEditorStats('script-editor');
+            updateEditorStats('tts-editor');
+            updateEditorStats('demo-editor');
+
+            // Render script preview if in preview mode
+            if (currentScriptView === 'preview') {
+                renderScriptPreview();
+            }
+
+            // Reset sync statuses to saved
+            ['script-sync-status', 'tts-sync-status', 'demo-sync-status'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) { el.textContent = '✓ Saved'; el.className = 'sync-status synced'; }
+            });
 
             // Update datasets
             if (data.datasets && data.datasets.length > 0) {
@@ -1141,27 +1478,36 @@ function loadArtifactsToUI(artifacts) {
     const demoContent = artifacts[demoKey] || artifacts['demo.py'] || '';
 
     if (scriptContent) {
-        document.getElementById('script-preview').innerHTML = `<pre>${escapeHtml(scriptContent)}</pre>`;
         document.getElementById('script-editor').value = scriptContent;
         originalContent.script = scriptContent;
         generated.script = true;
     }
 
     if (ttsContent) {
-        document.getElementById('tts-preview').innerHTML =
-            `<div class="tts-notice">✓ TTS Optimized</div><pre>${escapeHtml(ttsContent)}</pre>`;
         document.getElementById('tts-editor').value = ttsContent;
         originalContent.tts = ttsContent;
         generated.tts = true;
     }
 
     if (demoContent) {
-        document.getElementById('demo-preview').innerHTML =
-            `<div class="demo-badge">${demoKey}</div><pre>${escapeHtml(demoContent)}</pre>`;
         document.getElementById('demo-editor').value = demoContent;
         document.getElementById('demo-type-badge').textContent = demoKey;
         originalContent.demo = demoContent;
         generated.demo = true;
+    }
+
+    // Update stats and sync statuses
+    updateEditorStats('script-editor');
+    updateEditorStats('tts-editor');
+    updateEditorStats('demo-editor');
+    ['script-sync-status', 'tts-sync-status', 'demo-sync-status'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = '✓ Saved'; el.className = 'sync-status synced'; }
+    });
+
+    // Render script preview if in preview mode
+    if (currentScriptView === 'preview') {
+        renderScriptPreview();
     }
 
     updateStatus();
@@ -1296,19 +1642,11 @@ async function createNewProject() {
             document.getElementById('bullets').value = '';
             document.getElementById('demo-req').value = '';
 
-            // Reset previews
-            document.getElementById('script-preview').innerHTML = `
-                <div class="empty-preview">
-                    <span class="icon">🎬</span>
-                    <p>Click "Generate Package" to create content</p>
-                </div>`;
-            document.getElementById('tts-preview').innerHTML = '';
-            document.getElementById('demo-preview').innerHTML = '';
-
             // Reset editors
             document.getElementById('script-editor').value = '';
             document.getElementById('tts-editor').value = '';
             document.getElementById('demo-editor').value = '';
+            renderScriptPreview();
 
             originalContent = { script: '', tts: '', demo: '' };
             generated = { script: false, tts: false, demo: false, data: false };
@@ -1521,17 +1859,10 @@ async function loadProject(projectId, force = false) {
             if (project.artifacts && Object.keys(project.artifacts).length > 0) {
                 loadArtifactsToUI(project.artifacts);
             } else {
-                // Reset previews
-                document.getElementById('script-preview').innerHTML = `
-                    <div class="empty-preview">
-                        <span class="icon">🎬</span>
-                        <p>Click "Generate Package" to create content</p>
-                    </div>`;
-                document.getElementById('tts-preview').innerHTML = '';
-                document.getElementById('demo-preview').innerHTML = '';
                 document.getElementById('script-editor').value = '';
                 document.getElementById('tts-editor').value = '';
                 document.getElementById('demo-editor').value = '';
+                renderScriptPreview();
                 originalContent = { script: '', tts: '', demo: '' };
                 generated = { script: false, tts: false, demo: false, data: false };
             }

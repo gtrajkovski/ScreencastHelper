@@ -2,6 +2,10 @@
 
 {% block title %}Workspace - ScreenCast Studio{% endblock %}
 
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="workspace">
     <!-- Header -->
@@ -147,13 +151,7 @@
         <!-- Center Panel - Preview/Edit -->
         <div class="panel preview-panel">
             <div class="panel-header-row">
-                <h3 class="panel-title">👁 PREVIEW & EDIT</h3>
-                <div class="edit-mode-toggle">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="edit-mode-toggle">
-                        <span class="toggle-text">Edit Mode</span>
-                    </label>
-                </div>
+                <h3 class="panel-title">📝 EDIT</h3>
             </div>
 
             <div class="tabs">
@@ -188,18 +186,19 @@
                             <button class="section-tab" data-section="cta">CTA</button>
                         </div>
                         <div class="toolbar-actions">
+                            <div class="view-toggle" id="script-view-toggle">
+                                <button class="view-btn active" data-view="preview" onclick="setScriptView('preview')">👁 Preview</button>
+                                <button class="view-btn" data-view="edit" onclick="setScriptView('edit')">✏️ Edit</button>
+                            </div>
                             <span class="sync-status" id="script-sync-status">✓ Saved</span>
+                            <span class="editor-word-count" id="script-words"></span>
+                            <button class="btn btn-sm btn-review" onclick="reviewContent('narration_script.md')" title="Get AI suggestions">💡 Review</button>
                             <button class="btn btn-ai" onclick="openAIAssistant('script')" title="AI Assistant">✨ AI</button>
                             <button class="btn btn-sm" onclick="saveArtifact('narration_script.md')" id="save-script-btn">Save</button>
                         </div>
                     </div>
-                    <div id="script-preview" class="preview-content">
-                        <div class="empty-preview">
-                            <span class="icon">🎬</span>
-                            <p>Click "Generate Package" to create content</p>
-                        </div>
-                    </div>
-                    <textarea id="script-editor" class="editor-textarea hidden" placeholder="Narration script will appear here..."></textarea>
+                    <div id="script-preview" class="content-preview"></div>
+                    <textarea id="script-editor" class="editor-textarea" placeholder="Narration script will appear here. Click 'Generate Package' to create content." oninput="handleEditorChange('script-editor')" style="display:none;"></textarea>
                 </div>
 
                 <!-- TTS Tab -->
@@ -210,12 +209,14 @@
                         </div>
                         <div class="toolbar-actions">
                             <span class="sync-status" id="tts-sync-status">✓ Saved</span>
+                            <span class="editor-word-count" id="tts-words"></span>
+                            <button class="btn btn-sm btn-regen" onclick="regenerateFromScript()" title="Regenerate TTS from script">🔄</button>
+                            <button class="btn btn-sm btn-review" onclick="reviewContent('narration_tts.txt')" title="Get AI suggestions">💡 Review</button>
                             <button class="btn btn-ai" onclick="openAIAssistant('tts')" title="AI Assistant">✨ AI</button>
                             <button class="btn btn-sm" onclick="saveArtifact('narration_tts.txt')" id="save-tts-btn">Save</button>
                         </div>
                     </div>
-                    <div id="tts-preview" class="preview-content"></div>
-                    <textarea id="tts-editor" class="editor-textarea hidden" placeholder="TTS script will appear here..."></textarea>
+                    <textarea id="tts-editor" class="editor-textarea" placeholder="TTS-optimized script will appear here..." oninput="handleEditorChange('tts-editor')"></textarea>
                 </div>
 
                 <!-- Demo Tab -->
@@ -226,12 +227,13 @@
                         </div>
                         <div class="toolbar-actions">
                             <span class="sync-status" id="demo-sync-status">✓ Saved</span>
+                            <span class="editor-word-count" id="demo-lines"></span>
+                            <button class="btn btn-sm btn-review" onclick="reviewDemoContent()" title="Get AI suggestions">💡 Review</button>
                             <button class="btn btn-ai" onclick="openAIAssistant('demo')" title="AI Assistant">✨ AI</button>
                             <button class="btn btn-sm" onclick="saveCurrentDemo()" id="save-demo-btn">Save</button>
                         </div>
                     </div>
-                    <div id="demo-preview" class="preview-content"></div>
-                    <textarea id="demo-editor" class="editor-textarea hidden" placeholder="Demo code will appear here..."></textarea>
+                    <textarea id="demo-editor" class="editor-textarea code-editor" placeholder="Demo code will appear here..." oninput="handleEditorChange('demo-editor')"></textarea>
                 </div>
 
                 <!-- Data Tab -->
@@ -326,6 +328,30 @@
         </div>
     </div>
 
+    <!-- AI Suggestions Panel -->
+    <div id="suggestions-panel" class="suggestions-panel" style="display: none;">
+        <div class="suggestions-header">
+            <div class="suggestions-title-row">
+                <h3>💡 AI Suggestions</h3>
+                <span class="suggestions-target" id="suggestions-target"></span>
+            </div>
+            <div class="suggestions-controls">
+                <select id="suggestion-focus" onchange="refreshSuggestions()">
+                    <option value="general">General Review</option>
+                    <option value="clarity">Clarity</option>
+                    <option value="engagement">Engagement</option>
+                    <option value="structure">WWHAA Structure</option>
+                    <option value="technical">Technical Accuracy</option>
+                    <option value="tts">TTS Optimization</option>
+                </select>
+                <button onclick="refreshSuggestions()" class="btn btn-sm">🔄</button>
+                <button onclick="acceptAllSuggestions()" class="btn btn-sm btn-accept-all" title="Accept all suggestions">✓ All</button>
+                <button onclick="closeSuggestionsPanel()" class="btn btn-sm">✕</button>
+            </div>
+        </div>
+        <div class="suggestions-list" id="suggestions-list"></div>
+    </div>
+
     <!-- Unsaved Changes Modal -->
     <div id="unsaved-modal" class="modal hidden">
         <div class="modal-content">
@@ -403,6 +429,13 @@
                 <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
             </div>
         </div>
+    </div>
+
+    <!-- Auto-update toast -->
+    <div id="update-toast" class="update-toast" style="display: none;">
+        <span>Script saved. Update TTS to match?</span>
+        <button onclick="confirmAutoUpdate()">Yes, Update</button>
+        <button onclick="dismissToast()">No</button>
     </div>
 </div>
 {% endblock %}

@@ -723,6 +723,173 @@ def get_artifacts():
     })
 
 
+# ============================================================
+# AI Suggestions & Implementation
+# ============================================================
+
+@app.route('/api/get-suggestions', methods=['POST'])
+def get_suggestions():
+    """Get AI suggestions for improving an artifact."""
+    data = request.json
+    target = data.get('target', 'narration_script.md')
+    focus = data.get('focus', 'general')
+
+    content = current_project.get('artifacts', {}).get(target, '')
+
+    if not content:
+        return jsonify({'success': False, 'message': 'No content to review'}), 404
+
+    focus_prompts = {
+        'general': 'Review for overall quality and suggest 3-5 specific improvements.',
+        'clarity': 'Review for clarity and readability. Suggest specific sentences or sections that could be clearer.',
+        'engagement': 'Review for audience engagement. Suggest ways to make it more compelling.',
+        'technical': 'Review for technical accuracy. Flag any errors or areas needing verification.',
+        'tts': 'Review for text-to-speech optimization. Flag terms that will not pronounce well.',
+        'structure': 'Review the WWHAA structure. Is each section (Hook, Objective, Content, Summary, CTA) complete and well-balanced?'
+    }
+
+    prompt = f"""{focus_prompts.get(focus, focus_prompts['general'])}
+
+CONTENT TO REVIEW:
+{content}
+
+Return suggestions as a JSON array with this format:
+[
+  {{
+    "id": "1",
+    "type": "improvement|warning|error",
+    "section": "HOOK|OBJECTIVE|CONTENT|SUMMARY|CTA|general",
+    "issue": "Brief description of the issue",
+    "suggestion": "Specific suggestion to fix it",
+    "priority": "high|medium|low"
+  }}
+]
+
+Return ONLY valid JSON, no other text."""
+
+    try:
+        response = ai_client.generate(
+            "You are a script reviewer. Return only valid JSON arrays.",
+            prompt
+        )
+
+        # Try to parse JSON, handle markdown code blocks
+        response_text = response.strip()
+        if response_text.startswith('```'):
+            response_text = response_text.split('\n', 1)[1]
+            response_text = response_text.rsplit('```', 1)[0].strip()
+
+        suggestions = json.loads(response_text)
+
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions,
+            'target': target,
+            'focus': focus
+        })
+
+    except json.JSONDecodeError:
+        return jsonify({
+            'success': True,
+            'suggestions': [{'id': '1', 'type': 'improvement', 'issue': 'Review', 'suggestion': response.strip(), 'priority': 'medium', 'section': 'general'}],
+            'target': target
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/implement-suggestion', methods=['POST'])
+def implement_suggestion():
+    """Apply an AI suggestion to the specified artifact."""
+    global current_project
+
+    data = request.json
+    suggestion = data.get('suggestion', '')
+    target = data.get('target', 'narration_script.md')
+    action = data.get('action', 'improve')
+
+    if not suggestion:
+        return jsonify({'success': False, 'message': 'No suggestion provided'}), 400
+
+    current_content = current_project.get('artifacts', {}).get(target, '')
+
+    if not current_content:
+        return jsonify({'success': False, 'message': f'No content found for {target}'}), 404
+
+    action_prompts = {
+        'improve': f"""Apply this improvement suggestion to the content below:
+
+SUGGESTION: {suggestion}
+
+CURRENT CONTENT:
+{current_content}
+
+Instructions:
+1. Implement the suggestion while preserving the overall structure
+2. Keep the same formatting (headers, sections, etc.)
+3. Maintain the same tone and style
+4. Return the COMPLETE updated content, not just the changed parts
+
+Return ONLY the updated content, no explanations.""",
+
+        'rewrite': f"""Rewrite this content based on the feedback:
+
+FEEDBACK: {suggestion}
+
+CURRENT CONTENT:
+{current_content}
+
+Return ONLY the rewritten content.""",
+
+        'add': f"""Add the following to the content at the appropriate location:
+
+TO ADD: {suggestion}
+
+CURRENT CONTENT:
+{current_content}
+
+Return the COMPLETE content with the addition integrated naturally.""",
+
+        'remove': f"""Remove or address this issue in the content:
+
+ISSUE: {suggestion}
+
+CURRENT CONTENT:
+{current_content}
+
+Return the COMPLETE corrected content."""
+    }
+
+    prompt = action_prompts.get(action, action_prompts['improve'])
+
+    try:
+        updated_content = ai_client.generate(
+            "You are a precise editor. Apply changes exactly as requested. Return only the updated content.",
+            prompt
+        )
+
+        if 'artifacts' not in current_project:
+            current_project['artifacts'] = {}
+
+        current_project['artifacts'][target] = updated_content.strip()
+        current_project['saved'] = False
+        current_project['modified_at'] = datetime.now().isoformat()
+
+        return jsonify({
+            'success': True,
+            'message': f'Suggestion applied to {target}',
+            'target': target,
+            'updated_content': updated_content.strip(),
+            'word_count': len(updated_content.split())
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Failed to implement suggestion: {str(e)}'
+        }), 500
+
+
 # Screen recording state
 screen_recorder = {
     "active": False,
