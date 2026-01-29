@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Present - ScreenCast Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a0f;
+            color: #f0f0f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Layout */
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            grid-template-rows: 1fr auto;
+            height: 100vh;
+        }
+
+        /* ======== VISUAL CANVAS ======== */
+        .canvas {
+            background: #111118;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Slide View */
+        .slide-view {
+            width: 100%;
+            max-width: 1200px;
+            aspect-ratio: 16/9;
+            border-radius: 12px;
+            padding: 60px 80px;
+            display: none;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .slide-view.active { display: flex; }
+
+        .slide-view.style-title {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            justify-content: center; align-items: center; text-align: center;
+        }
+        .slide-view.style-objectives {
+            background: linear-gradient(135deg, #0d2818 0%, #1a3a2a 100%);
+        }
+        .slide-view.style-summary {
+            background: linear-gradient(135deg, #2d1f0e 0%, #3a2a14 100%);
+        }
+        .slide-view.style-cta {
+            background: linear-gradient(135deg, #1e3a5f 0%, #0a192f 100%);
+            justify-content: center; align-items: center; text-align: center;
+        }
+        .slide-view.style-default {
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+        }
+
+        .slide-section-label {
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: #10b981;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+
+        .slide-title {
+            font-size: 2.6em;
+            font-weight: 700;
+            margin-bottom: 40px;
+            line-height: 1.2;
+        }
+        .slide-view.style-title .slide-title { font-size: 3.6em; margin-bottom: 20px; }
+
+        .slide-bullets { list-style: none; }
+        .slide-bullets li {
+            font-size: 1.5em;
+            margin-bottom: 22px;
+            padding-left: 36px;
+            position: relative;
+            opacity: 0;
+            transform: translateX(-20px);
+            animation: slideIn 0.5s ease forwards;
+            line-height: 1.4;
+        }
+        .slide-bullets li:before {
+            content: '\25B8';
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-size: 1.1em;
+        }
+        @keyframes slideIn { to { opacity: 1; transform: translateX(0); } }
+        .slide-bullets li:nth-child(1) { animation-delay: 0.2s; }
+        .slide-bullets li:nth-child(2) { animation-delay: 0.4s; }
+        .slide-bullets li:nth-child(3) { animation-delay: 0.6s; }
+        .slide-bullets li:nth-child(4) { animation-delay: 0.8s; }
+        .slide-bullets li:nth-child(5) { animation-delay: 1.0s; }
+
+        /* Notebook View */
+        .notebook-view {
+            width: 100%;
+            max-width: 1100px;
+            max-height: calc(100vh - 140px);
+            background: #1e1e1e;
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .notebook-view.active { display: flex; }
+
+        .nb-header {
+            background: #2d2d2d;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid #3d3d3d;
+        }
+        .nb-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .nb-dot.red { background: #ff5f56; }
+        .nb-dot.yellow { background: #ffbd2e; }
+        .nb-dot.green { background: #27ca40; }
+        .nb-title { margin-left: 16px; color: #888; font-size: 0.85em; }
+
+        .nb-cells {
+            padding: 16px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .cell {
+            margin-bottom: 16px;
+            border: 1px solid #3c3c3c;
+            border-radius: 6px;
+            overflow: hidden;
+            opacity: 0.35;
+            transition: all 0.3s;
+        }
+        .cell.active {
+            opacity: 1;
+            border-color: #10b981;
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+        }
+        .cell.executed {
+            opacity: 1;
+            border-color: #3c3c3c;
+        }
+
+        .cell-label {
+            background: #2d2d2d;
+            padding: 6px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.8em;
+            color: #888;
+        }
+        .cell-num {
+            background: #3d3d3d;
+            padding: 2px 10px;
+            border-radius: 3px;
+            font-family: 'Fira Code', monospace;
+        }
+        .cell-status { margin-left: auto; }
+        .cell.active .cell-status:after {
+            content: '';
+            display: inline-block;
+            width: 8px; height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .cell-code {
+            padding: 14px;
+            background: #1e1e1e;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        .cell-code pre { margin: 0; white-space: pre-wrap; }
+
+        .cell-output {
+            padding: 10px 14px;
+            background: #252526;
+            border-top: 1px solid #3d3d3d;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85em;
+            color: #9cdcfe;
+            display: none;
+            white-space: pre-wrap;
+        }
+        .cell-output.visible {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* IVQ View */
+        .ivq-view {
+            width: 100%;
+            max-width: 900px;
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 60px;
+            display: none;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .ivq-view.active { display: flex; }
+
+        .ivq-label {
+            color: #10b981;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+        .ivq-question {
+            font-size: 1.7em;
+            font-weight: 600;
+            margin-bottom: 36px;
+            line-height: 1.4;
+        }
+        .ivq-options { display: flex; flex-direction: column; gap: 14px; }
+        .ivq-option {
+            background: #252540;
+            padding: 18px 22px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .ivq-option:hover { background: #2a2a50; border-color: #10b981; }
+        .ivq-option.correct { background: rgba(16,185,129,0.25); border-color: #10b981; }
+        .ivq-option.incorrect { background: rgba(239,68,68,0.25); border-color: #ef4444; }
+        .opt-letter {
+            width: 38px; height: 38px;
+            background: #3d3d5c;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 1.05em;
+            flex-shrink: 0;
+        }
+        .opt-text { flex: 1; font-size: 1.05em; }
+
+        /* ======== TELEPROMPTER ======== */
+        .teleprompter {
+            background: #0d0d12;
+            border-left: 1px solid #2a2a3a;
+            display: flex;
+            flex-direction: column;
+        }
+        .tp-header {
+            padding: 14px 20px;
+            background: #111118;
+            border-bottom: 1px solid #2a2a3a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .tp-header h3 {
+            font-size: 0.85em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .tp-indicator {
+            background: #2a2a3a;
+            padding: 3px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+        .tp-content {
+            flex: 1;
+            padding: 28px 22px;
+            overflow-y: auto;
+        }
+        .tp-cues {
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #2a2a3a;
+        }
+        .tp-cue {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: #111118;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 0.85em;
+            color: #10b981;
+            font-style: italic;
+        }
+        .tp-narration {
+            font-size: 1.3em;
+            line-height: 1.9;
+            color: #e0e0e0;
+        }
+        .tp-narration .pause-mark {
+            display: inline-block;
+            background: rgba(245,158,11,0.2);
+            color: #f59e0b;
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+
+        /* ======== CONTROL BAR ======== */
+        .controls {
+            grid-column: 1 / -1;
+            background: #111118;
+            border-top: 1px solid #2a2a3a;
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .nav-btns { display: flex; gap: 8px; }
+        .nav-btn {
+            padding: 10px 18px;
+            background: #2a2a3a;
+            border: none;
+            border-radius: 6px;
+            color: #f0f0f5;
+            cursor: pointer;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .nav-btn:hover { background: #3a3a4a; }
+        .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .seg-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+        .seg-title { font-weight: 500; font-size: 0.95em; }
+        .seg-type-badge {
+            background: #2a2a3a;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .seg-type-badge.notebook { background: rgba(16,185,129,0.2); color: #10b981; }
+        .seg-type-badge.ivq { background: rgba(245,158,11,0.2); color: #f59e0b; }
+
+        .progress-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .progress-bar {
+            width: 180px;
+            height: 4px;
+            background: #2a2a3a;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #10b981;
+            transition: width 0.3s;
+        }
+        .timer {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.95em;
+            color: #888;
+        }
+
+        .rec-btn {
+            padding: 10px 22px;
+            background: #c0392b;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .rec-btn:hover { background: #e74c3c; }
+        .rec-btn.recording {
+            background: #e74c3c;
+            animation: recPulse 1.5s infinite;
+        }
+        @keyframes recPulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(231,76,60,0); }
+        }
+        .rec-dot {
+            width: 10px; height: 10px;
+            background: #fff; border-radius: 50%;
+        }
+        .rec-btn.recording .rec-dot {
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .fs-btn {
+            padding: 10px 14px;
+            background: #2a2a3a;
+            border: none;
+            border-radius: 6px;
+            color: #f0f0f5;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Fullscreen hides teleprompter */
+        .container.fullscreen .teleprompter { display: none; }
+        .container.fullscreen { grid-template-columns: 1fr; }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            color: #606070;
+            font-size: 1.2em;
+        }
+        .empty-state p { margin-top: 12px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container" id="container">
+        <!-- Visual Canvas -->
+        <div class="canvas">
+            <div class="slide-view" id="slide-view">
+                <div class="slide-section-label" id="slide-label"></div>
+                <h1 class="slide-title" id="slide-title"></h1>
+                <ul class="slide-bullets" id="slide-bullets"></ul>
+            </div>
+
+            <div class="notebook-view" id="notebook-view">
+                <div class="nb-header">
+                    <span class="nb-dot red"></span>
+                    <span class="nb-dot yellow"></span>
+                    <span class="nb-dot green"></span>
+                    <span class="nb-title">demo.ipynb - Jupyter Notebook</span>
+                </div>
+                <div class="nb-cells" id="nb-cells"></div>
+            </div>
+
+            <div class="ivq-view" id="ivq-view">
+                <div class="ivq-label">Knowledge Check</div>
+                <h2 class="ivq-question" id="ivq-question"></h2>
+                <div class="ivq-options" id="ivq-options"></div>
+            </div>
+        </div>
+
+        <!-- Teleprompter -->
+        <div class="teleprompter">
+            <div class="tp-header">
+                <h3>Teleprompter</h3>
+                <span class="tp-indicator" id="tp-indicator">1 / 1</span>
+            </div>
+            <div class="tp-content">
+                <div class="tp-cues" id="tp-cues"></div>
+                <div class="tp-narration" id="tp-narration"></div>
+            </div>
+        </div>
+
+        <!-- Control Bar -->
+        <div class="controls">
+            <div class="nav-btns">
+                <button class="nav-btn" id="btn-prev" onclick="prevSegment()">&#9664; Prev</button>
+                <button class="nav-btn" id="btn-next" onclick="nextSegment()">Next &#9654;</button>
+            </div>
+            <div class="seg-info">
+                <span class="seg-title" id="seg-title">Loading...</span>
+                <span class="seg-type-badge" id="seg-badge"></span>
+                <div class="progress-wrap">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <span class="timer" id="timer">0:00</span>
+                </div>
+            </div>
+            <button class="fs-btn" onclick="toggleFullscreen()" title="Fullscreen (F)">&#x26F6;</button>
+            <button class="rec-btn" id="rec-btn" onclick="toggleRecording()">
+                <span class="rec-dot"></span>
+                <span id="rec-label">Record</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+    let segments = [];
+    let currentIndex = 0;
+    let activeCellIndex = 0;
+    let isRecording = false;
+    let timerSeconds = 0;
+    let timerInterval = null;
+
+    // ---- Load ----
+    document.addEventListener('DOMContentLoaded', loadPresentation);
+
+    async function loadPresentation() {
+        try {
+            let res = await fetch('/api/presentation/segments');
+            let data = await res.json();
+
+            if (!data.success) {
+                // Auto-parse script
+                res = await fetch('/api/parse-script', {method: 'POST'});
+                data = await res.json();
+            }
+
+            if (data.success && (data.segments || []).length > 0) {
+                segments = data.segments;
+                renderSegment(0);
+            } else {
+                showEmpty(data.message || 'No script found. Generate content in the workspace first.');
+            }
+        } catch (err) {
+            showEmpty('Failed to load: ' + err.message);
+        }
+    }
+
+    function showEmpty(msg) {
+        document.getElementById('slide-view').classList.add('active', 'style-default');
+        document.getElementById('slide-title').textContent = msg;
+        document.getElementById('slide-label').textContent = '';
+        document.getElementById('slide-bullets').innerHTML =
+            '<li>Go back to the workspace and generate a script first</li>';
+    }
+
+    // ---- Render ----
+    function renderSegment(index) {
+        if (index < 0 || index >= segments.length) return;
+        currentIndex = index;
+        activeCellIndex = 0;
+        const seg = segments[index];
+
+        // Hide all views
+        document.querySelectorAll('.slide-view, .notebook-view, .ivq-view')
+            .forEach(el => el.classList.remove('active', 'style-title', 'style-objectives',
+                'style-summary', 'style-cta', 'style-default'));
+
+        if (seg.type === 'notebook') renderNotebook(seg);
+        else if (seg.type === 'ivq') renderIVQ(seg);
+        else renderSlide(seg);
+
+        updateTeleprompter(seg);
+        updateControls(seg);
+    }
+
+    // ---- Slide ----
+    function renderSlide(seg) {
+        const view = document.getElementById('slide-view');
+        view.classList.add('active', 'style-' + (seg.slide_style || 'default'));
+
+        document.getElementById('slide-label').textContent = seg.section || '';
+        document.getElementById('slide-title').textContent =
+            seg.slide_content?.heading || seg.title || '';
+
+        const bullets = seg.slide_content?.bullets || [];
+        document.getElementById('slide-bullets').innerHTML =
+            bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('');
+    }
+
+    // ---- Notebook ----
+    function renderNotebook(seg) {
+        const view = document.getElementById('notebook-view');
+        view.classList.add('active');
+
+        const cells = seg.cells || [];
+        document.getElementById('nb-cells').innerHTML = cells.map((c, i) => `
+            <div class="cell ${i === 0 ? 'active' : ''}" data-index="${i}">
+                <div class="cell-label">
+                    <span class="cell-num">In [${i + 1}]:</span>
+                    <span class="cell-status"></span>
+                </div>
+                <div class="cell-code">
+                    <pre><code class="language-python">${escapeHtml(c.code)}</code></pre>
+                </div>
+                <div class="cell-output" id="out-${i}">${escapeHtml(c.output || '')}</div>
+            </div>
+        `).join('');
+
+        document.querySelectorAll('.cell-code code').forEach(el => hljs.highlightElement(el));
+    }
+
+    function executeCell() {
+        const seg = segments[currentIndex];
+        if (!seg || seg.type !== 'notebook') return false;
+
+        const cells = document.querySelectorAll('.cell');
+        if (activeCellIndex >= cells.length) return false;
+
+        const cell = cells[activeCellIndex];
+        cell.classList.remove('active');
+        cell.classList.add('executed');
+
+        // Show output
+        const out = document.getElementById('out-' + activeCellIndex);
+        if (out && out.textContent.trim()) out.classList.add('visible');
+
+        activeCellIndex++;
+        if (activeCellIndex < cells.length) {
+            cells[activeCellIndex].classList.add('active');
+            cells[activeCellIndex].scrollIntoView({behavior: 'smooth', block: 'center'});
+            return true;
+        }
+        return false; // all cells executed
+    }
+
+    // ---- IVQ ----
+    function renderIVQ(seg) {
+        const view = document.getElementById('ivq-view');
+        view.classList.add('active');
+
+        const ivq = seg.ivq || {};
+        document.getElementById('ivq-question').textContent = ivq.question || '';
+
+        const options = ivq.options || [];
+        document.getElementById('ivq-options').innerHTML = options.map(o => `
+            <div class="ivq-option" data-letter="${o.letter}" onclick="selectOption('${o.letter}')">
+                <span class="opt-letter">${o.letter}</span>
+                <span class="opt-text">${escapeHtml(o.text)}</span>
+            </div>
+        `).join('');
+    }
+
+    function selectOption(letter) {
+        const seg = segments[currentIndex];
+        const correct = seg.ivq?.correct_answer;
+        document.querySelectorAll('.ivq-option').forEach(el => {
+            el.classList.remove('correct', 'incorrect');
+            if (el.dataset.letter === letter) {
+                el.classList.add(letter === correct ? 'correct' : 'incorrect');
+            }
+            if (el.dataset.letter === correct) {
+                el.classList.add('correct');
+            }
+        });
+    }
+
+    // ---- Teleprompter ----
+    function updateTeleprompter(seg) {
+        document.getElementById('tp-indicator').textContent =
+            `${currentIndex + 1} / ${segments.length}`;
+
+        // Cues
+        const cues = seg.visual_cues || [];
+        const cuesEl = document.getElementById('tp-cues');
+        if (cues.length > 0) {
+            cuesEl.style.display = 'block';
+            cuesEl.innerHTML = cues.map(c =>
+                `<div class="tp-cue">${getCueIcon(c)} ${escapeHtml(c)}</div>`
+            ).join('');
+        } else {
+            cuesEl.style.display = 'none';
+        }
+
+        // Narration with PAUSE markers styled
+        let narration = escapeHtml(seg.narration || '');
+        narration = narration.replace(/\[PAUSE\]/g,
+            '<span class="pause-mark">PAUSE</span>');
+        document.getElementById('tp-narration').innerHTML = narration;
+    }
+
+    function getCueIcon(cue) {
+        const u = cue.toUpperCase();
+        if (u.includes('SLIDE')) return '&#x1F5BC;';
+        if (u.includes('SWITCH') || u.includes('NOTEBOOK')) return '&#x1F4BB;';
+        if (u.includes('RUN')) return '&#x25B6;';
+        if (u.includes('DISPLAY')) return '&#x1F4FA;';
+        return '&#x1F4CC;';
+    }
+
+    // ---- Controls ----
+    function updateControls(seg) {
+        document.getElementById('btn-prev').disabled = currentIndex === 0;
+        document.getElementById('btn-next').disabled = currentIndex >= segments.length - 1;
+        document.getElementById('seg-title').textContent = seg.title || '';
+
+        const badge = document.getElementById('seg-badge');
+        badge.textContent = seg.type;
+        badge.className = 'seg-type-badge' +
+            (seg.type === 'notebook' ? ' notebook' : '') +
+            (seg.type === 'ivq' ? ' ivq' : '');
+
+        const pct = ((currentIndex + 1) / segments.length) * 100;
+        document.getElementById('progress-fill').style.width = pct + '%';
+    }
+
+    function prevSegment() {
+        if (currentIndex > 0) renderSegment(currentIndex - 1);
+    }
+
+    function nextSegment() {
+        if (currentIndex < segments.length - 1) renderSegment(currentIndex + 1);
+    }
+
+    // ---- Keyboard ----
+    document.addEventListener('keydown', e => {
+        if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            const seg = segments[currentIndex];
+            if (seg && seg.type === 'notebook') {
+                if (!executeCell()) nextSegment();
+            } else {
+                nextSegment();
+            }
+        } else if (e.key === 'ArrowRight' || e.key === 'n' || e.key === 'N') {
+            e.preventDefault();
+            nextSegment();
+        } else if (e.key === 'ArrowLeft' || e.key === 'p' || e.key === 'P') {
+            e.preventDefault();
+            prevSegment();
+        } else if (e.key === 'r' || e.key === 'R') {
+            toggleRecording();
+        } else if (e.key === 'f' || e.key === 'F') {
+            toggleFullscreen();
+        } else if (e.key === 'Escape') {
+            if (document.fullscreenElement) document.exitFullscreen();
+        }
+    });
+
+    // ---- Recording ----
+    async function toggleRecording() {
+        const btn = document.getElementById('rec-btn');
+        const label = document.getElementById('rec-label');
+
+        if (!isRecording) {
+            try {
+                const res = await fetch('/api/start-screen-record', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({width: 1920, height: 1080, fps: 30,
+                        filename: 'presentation.mp4'})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    isRecording = true;
+                    btn.classList.add('recording');
+                    label.textContent = 'Stop';
+                    timerSeconds = 0;
+                    timerInterval = setInterval(() => {
+                        timerSeconds++;
+                        document.getElementById('timer').textContent = formatTime(timerSeconds);
+                    }, 1000);
+                } else {
+                    alert('Failed to start recording: ' + data.message);
+                }
+            } catch (err) {
+                alert('Recording error: ' + err.message);
+            }
+        } else {
+            try {
+                const res = await fetch('/api/stop-screen-record', {method: 'POST'});
+                const data = await res.json();
+                isRecording = false;
+                btn.classList.remove('recording');
+                label.textContent = 'Record';
+                clearInterval(timerInterval);
+                if (data.success) alert('Recording saved: ' + (data.filename || 'presentation.mp4'));
+            } catch (err) {
+                alert('Stop error: ' + err.message);
+            }
+        }
+    }
+
+    // ---- Fullscreen ----
+    function toggleFullscreen() {
+        const el = document.getElementById('container');
+        if (!document.fullscreenElement) {
+            el.requestFullscreen().catch(() => {});
+            el.classList.add('fullscreen');
+        } else {
+            document.exitFullscreen();
+            el.classList.remove('fullscreen');
+        }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement) {
+            document.getElementById('container').classList.remove('fullscreen');
+        }
+    });
+
+    // ---- Util ----
+    function escapeHtml(text) {
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
+    }
+
+    function formatTime(s) {
+        const m = Math.floor(s / 60);
+        return `${m}:${(s % 60).toString().padStart(2, '0')}`;
+    }
+    </script>
+</body>
+</html>

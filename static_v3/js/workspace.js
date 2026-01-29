@@ -111,6 +111,26 @@ function openRecordingStudio() {
     );
 }
 
+// Open Presentation Mode
+async function openPresentationMode() {
+    addChatMessage('system', 'Parsing script for presentation...');
+    try {
+        const response = await fetch('/api/parse-script', {method: 'POST'});
+        const data = await response.json();
+        if (!data.success) {
+            addChatMessage('assistant', 'Cannot open presentation: ' + data.message);
+            return;
+        }
+        addChatMessage('system', `Presentation ready: ${data.total_segments} segments. Opening...`);
+        const w = screen.width;
+        const h = screen.height;
+        window.open('/present', 'Presentation',
+            `width=${w},height=${h},left=0,top=0,resizable=yes`);
+    } catch (error) {
+        addChatMessage('assistant', 'Error: ' + error.message);
+    }
+}
+
 // Quick action buttons
 function setupQuickActions() {
     document.querySelectorAll('.quick-btn').forEach(btn => {

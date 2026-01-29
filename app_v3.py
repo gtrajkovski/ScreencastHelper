@@ -75,6 +75,12 @@ def recording_studio():
     return render_template('recording_studio.html')
 
 
+@app.route('/present')
+def present():
+    """Full-screen presentation mode for recording."""
+    return render_template('present.html')
+
+
 @app.route('/export')
 def export_page():
     return render_template('export.html')
@@ -479,6 +485,235 @@ def get_recording_data():
                      current_project.get('artifacts', {}).get('demo.sh', ''))),
         'environment': current_project.get('environment', 'jupyter'),
         'artifacts': current_project.get('artifacts', {})
+    })
+
+
+def parse_script_to_segments(script, duration_minutes=7):
+    """Parse narration script into presentation segments."""
+    import re
+    segments = []
+    segment_id = 0
+
+    # WWHAA proportions for timing
+    section_proportions = {
+        'HOOK': 0.10, 'OBJECTIVE': 0.10, 'CONTENT': 0.60,
+        'SUMMARY': 0.10, 'CTA': 0.10, 'CALL TO ACTION': 0.10
+    }
+    total_seconds = duration_minutes * 60
+
+    # Slide style mapping
+    style_map = {
+        'HOOK': 'title', 'OBJECTIVE': 'objectives',
+        'CONTENT': 'default', 'SUMMARY': 'summary',
+        'CTA': 'cta', 'CALL TO ACTION': 'cta'
+    }
+
+    # Try splitting by ## headers
+    section_pattern = (
+        r'##\s*(\d+\.\s*)?(HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION|CTA)'
+        r'([^\n]*)\n([\s\S]*?)(?=##\s*\d*\.?\s*'
+        r'(?:HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION|CTA)|$)'
+    )
+    matches = re.findall(section_pattern, script, re.IGNORECASE)
+
+    if not matches:
+        # Fallback: single slide with all content
+        return [{
+            'id': 0, 'type': 'slide', 'section': 'CONTENT',
+            'title': current_project.get('topic', 'Presentation'),
+            'narration': script.strip(),
+            'visual_cues': [],
+            'duration_seconds': total_seconds,
+            'slide_style': 'default',
+            'slide_content': {'heading': current_project.get('topic', ''), 'bullets': []},
+            'cells': [], 'ivq': None
+        }]
+
+    for match in matches:
+        _, section_type, subtitle, content = match
+        section_type = section_type.strip().upper()
+        subtitle = subtitle.strip(' -:')
+        content = content.strip()
+
+        proportion = section_proportions.get(section_type, 0.10)
+        duration = int(total_seconds * proportion)
+
+        # Extract visual cues (excluding PAUSE)
+        all_cues = re.findall(r'\[([^\]]+)\]', content)
+        visual_cues = [c for c in all_cues if c.upper() != 'PAUSE']
+
+        # Clean narration: remove markdown headers, bold markers, visual cues for reading
+        narration = re.sub(r'\*\*([^*]+)\*\*', r'\1', content)
+        narration = re.sub(r'#{1,3}\s+', '', narration)
+        narration = re.sub(r'\[(?!PAUSE)[^\]]*\]', '', narration)
+        narration = re.sub(r'\n{3,}', '\n\n', narration).strip()
+
+        # Check for code blocks in content
+        code_blocks = re.findall(r'```(?:python)?\n([\s\S]*?)```', content)
+
+        # Check for IVQ markers
+        has_ivq = bool(re.search(r'IVQ|IN-VIDEO QUESTION|KNOWLEDGE CHECK', content, re.IGNORECASE))
+
+        if has_ivq:
+            # Parse IVQ
+            q_match = re.search(r'\*\*(?:Question|Q)[:\s]*\*\*\s*([^\n]+)', content)
+            question = q_match.group(1).strip() if q_match else 'Question'
+            options = []
+            for opt_match in re.finditer(r'([A-D])[\.\)]\s*(.+)', content):
+                options.append({'letter': opt_match.group(1), 'text': opt_match.group(2).strip()})
+            correct_match = re.search(r'(?:Correct|Answer)[:\s]*([A-D])', content, re.IGNORECASE)
+            correct = correct_match.group(1) if correct_match else 'A'
+
+            segments.append({
+                'id': segment_id, 'type': 'ivq', 'section': section_type,
+                'title': subtitle or section_type,
+                'narration': narration, 'visual_cues': visual_cues,
+                'duration_seconds': duration,
+                'slide_style': None, 'slide_content': None,
+                'cells': [],
+                'ivq': {'question': question, 'options': options, 'correct_answer': correct}
+            })
+            segment_id += 1
+
+        elif code_blocks and section_type == 'CONTENT':
+            # Split CONTENT into slide + notebook sub-segments
+            parts = re.split(r'```(?:python)?\n[\s\S]*?```', content)
+            prose_parts = [p.strip() for p in parts if p.strip()]
+
+            # Leading prose as slide
+            if prose_parts:
+                bullets = [line.lstrip('- *').strip()
+                           for line in prose_parts[0].split('\n')
+                           if re.match(r'^\s*[-*]\s+', line)]
+                heading = subtitle or section_type
+                prose_narration = re.sub(r'\[(?!PAUSE)[^\]]*\]', '', prose_parts[0]).strip()
+                if prose_narration:
+                    segments.append({
+                        'id': segment_id, 'type': 'slide', 'section': section_type,
+                        'title': heading, 'narration': prose_narration,
+                        'visual_cues': visual_cues, 'duration_seconds': duration // 3,
+                        'slide_style': 'default',
+                        'slide_content': {'heading': heading, 'bullets': bullets[:5]},
+                        'cells': [], 'ivq': None
+                    })
+                    segment_id += 1
+
+            # Code blocks as notebook segment
+            cells = [{'code': block.strip(), 'output': ''} for block in code_blocks]
+            segments.append({
+                'id': segment_id, 'type': 'notebook', 'section': section_type,
+                'title': subtitle or 'Live Demo',
+                'narration': narration, 'visual_cues': visual_cues,
+                'duration_seconds': duration * 2 // 3,
+                'slide_style': None, 'slide_content': None,
+                'cells': cells, 'ivq': None
+            })
+            segment_id += 1
+
+        else:
+            # Pure slide segment
+            bullets = [line.lstrip('- *').strip()
+                       for line in content.split('\n')
+                       if re.match(r'^\s*[-*]\s+', line)]
+            # If no bullets, extract key sentences
+            if not bullets:
+                sentences = [s.strip() for s in re.split(r'[.!?]\s+', narration) if len(s.strip()) > 15]
+                bullets = sentences[:5]
+
+            heading = subtitle or section_type
+            segments.append({
+                'id': segment_id, 'type': 'slide', 'section': section_type,
+                'title': heading, 'narration': narration,
+                'visual_cues': visual_cues, 'duration_seconds': duration,
+                'slide_style': style_map.get(section_type, 'default'),
+                'slide_content': {'heading': heading, 'bullets': bullets[:5]},
+                'cells': [], 'ivq': None
+            })
+            segment_id += 1
+
+    # Also check for demo code artifact and add as notebook if no code segments exist
+    has_notebook = any(s['type'] == 'notebook' for s in segments)
+    if not has_notebook:
+        demo = current_project.get('artifacts', {})
+        demo_code = demo.get('demo.ipynb') or demo.get('demo.py') or demo.get('demo.sh')
+        if demo_code:
+            cells = []
+            # Try parsing as notebook JSON
+            try:
+                nb = json.loads(demo_code)
+                for cell in nb.get('cells', []):
+                    if cell.get('cell_type') == 'code':
+                        source = cell['source']
+                        code = ''.join(source) if isinstance(source, list) else source
+                        output = ''
+                        if cell.get('outputs'):
+                            out = cell['outputs'][0]
+                            if 'text' in out:
+                                output = ''.join(out['text']) if isinstance(out['text'], list) else out['text']
+                            elif 'data' in out and 'text/plain' in out['data']:
+                                output = out['data']['text/plain']
+                        cells.append({'code': code, 'output': output})
+            except (json.JSONDecodeError, TypeError):
+                # Plain Python - split by function/class defs
+                blocks = re.split(r'\n(?=def |class |# ={3,}|if __name__)', demo_code)
+                cells = [{'code': b.strip(), 'output': ''} for b in blocks if b.strip()]
+
+            if cells:
+                # Insert notebook segment before SUMMARY
+                insert_idx = len(segments)
+                for i, s in enumerate(segments):
+                    if s['section'] in ('SUMMARY', 'CTA', 'CALL TO ACTION'):
+                        insert_idx = i
+                        break
+                segments.insert(insert_idx, {
+                    'id': segment_id, 'type': 'notebook', 'section': 'CONTENT',
+                    'title': 'Live Demo',
+                    'narration': 'Let me walk you through the code.',
+                    'visual_cues': [], 'duration_seconds': int(total_seconds * 0.3),
+                    'slide_style': None, 'slide_content': None,
+                    'cells': cells, 'ivq': None
+                })
+                # Re-index
+                for i, s in enumerate(segments):
+                    s['id'] = i
+
+    return segments
+
+
+@app.route('/api/parse-script', methods=['POST'])
+def api_parse_script():
+    """Parse script into presentation segments."""
+    script = current_project.get('artifacts', {}).get('narration_script.md', '')
+    if not script:
+        return jsonify({'success': False, 'message': 'No script generated yet'}), 404
+
+    try:
+        duration = current_project.get('duration', 7)
+        segments = parse_script_to_segments(script, duration)
+        current_project['presentation'] = {
+            'segments': segments,
+            'total_duration': duration * 60
+        }
+        return jsonify({
+            'success': True,
+            'segments': segments,
+            'total_segments': len(segments)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/presentation/segments', methods=['GET'])
+def get_presentation_segments():
+    """Get parsed segments for presentation."""
+    presentation = current_project.get('presentation')
+    if not presentation:
+        return jsonify({'success': False, 'message': 'No presentation parsed yet'}), 404
+    return jsonify({
+        'success': True,
+        'segments': presentation['segments'],
+        'total_duration': presentation.get('total_duration', 420),
+        'project_name': current_project.get('topic', 'Untitled')
     })
 
 
