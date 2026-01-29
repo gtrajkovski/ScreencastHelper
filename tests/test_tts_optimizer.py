@@ -43,11 +43,11 @@ class TestTTSOptimizer:
         """Test Python-specific term replacements."""
         optimizer = TTSOptimizer()
 
-        text = "Import sklearn and use GridSearchCV."
+        text = "Import sklearn and use numpy."
         result = optimizer._apply_replacements(text)
 
         assert "scikit-learn" in result
-        assert "Grid Search C-V" in result
+        assert "num-pie" in result
 
     def test_optimize_percentages(self):
         """Test percentage optimization."""
