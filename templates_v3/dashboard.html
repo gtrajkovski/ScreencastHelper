@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - ScreenCast Studio{% endblock %}
+
+{% block content %}
+<div class="app">
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <span class="logo-icon">🎬</span>
+            <span class="logo-text">ScreenCast Studio</span>
+            <span class="version">v3.0</span>
+        </div>
+        <div class="header-right">
+            <a href="#" class="nav-link">Docs</a>
+            <a href="#" class="nav-link">Settings</a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="dashboard-main">
+        <!-- Quick Start Section -->
+        <div class="quick-start-card">
+            <div class="quick-start-content">
+                <a href="/workspace" class="new-project-btn" onclick="createNewProjectAndGo(event)">
+                    <span class="icon">🎬</span>
+                    <span class="label">NEW</span>
+                </a>
+                <div class="quick-start-info">
+                    <h2>Create a Screencast Package</h2>
+                    <p>AI generates narration scripts, demo code, sample data, and TTS-optimized text.</p>
+                    <button class="btn btn-primary" onclick="createNewProjectAndGo(event)">Start New Project</button>
+                </div>
+            </div>
+
+            <!-- Templates -->
+            <div class="templates-section">
+                <p class="templates-label">Quick start templates:</p>
+                <div class="templates-grid">
+                    <button class="template-btn" onclick="createFromTemplate('Code Profiling', 'Identifying Code Bottlenecks', 'jupyter')">
+                        <span class="icon">⚡</span>
+                        <span class="name">Code Profiling</span>
+                        <span class="desc">Performance demo</span>
+                    </button>
+                    <button class="template-btn" onclick="createFromTemplate('Data Cleaning', 'Data Cleaning with pandas', 'jupyter')">
+                        <span class="icon">🧹</span>
+                        <span class="name">Data Cleaning</span>
+                        <span class="desc">pandas workflow</span>
+                    </button>
+                    <button class="template-btn" onclick="createFromTemplate('ML Training', 'Machine Learning Model Training', 'jupyter')">
+                        <span class="icon">🤖</span>
+                        <span class="name">ML Training</span>
+                        <span class="desc">Model training</span>
+                    </button>
+                    <button class="template-btn" onclick="createFromTemplate('CLI Tool', 'Building a CLI Tool', 'terminal')">
+                        <span class="icon">🔧</span>
+                        <span class="name">CLI Tool</span>
+                        <span class="desc">Terminal demo</span>
+                    </button>
+                    <button class="template-btn" onclick="createFromTemplate('API Usage', 'REST API Exploration', 'ipython')">
+                        <span class="icon">🌐</span>
+                        <span class="name">API Usage</span>
+                        <span class="desc">REST exploration</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Projects -->
+        <section class="recent-projects">
+            <div class="section-header">
+                <h2>Recent Projects</h2>
+            </div>
+            <div class="projects-grid" id="projects-grid">
+                <div class="project-card empty-projects-card">
+                    <div class="project-preview">
+                        <span class="project-icon">📂</span>
+                    </div>
+                    <div class="project-info">
+                        <h3>No saved projects</h3>
+                        <p>Create a new project to get started</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const envIcons = {
+    jupyter: '📓', terminal: '💻', vscode: '📝',
+    ipython: '🐍', pycharm: '🔧'
+};
+
+function openRecordingStudio() {
+    const width = 1400;
+    const height = 900;
+    const left = (screen.width - width) / 2;
+    const top = (screen.height - height) / 2;
+
+    window.open(
+        '/recording-studio',
+        'RecordingStudio',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no`
+    );
+}
+
+async function createNewProjectAndGo(event) {
+    event.preventDefault();
+
+    try {
+        await fetch('/api/projects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'New Project' })
+        });
+        window.location.href = '/workspace';
+    } catch (e) {
+        window.location.href = '/workspace';
+    }
+}
+
+async function createFromTemplate(name, topic, environment) {
+    try {
+        await fetch('/api/projects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, topic, environment })
+        });
+        window.location.href = '/workspace';
+    } catch (e) {
+        window.location.href = '/workspace';
+    }
+}
+
+async function openProject(projectId) {
+    try {
+        await fetch(`/api/projects/${projectId}?force=true`);
+        window.location.href = '/workspace';
+    } catch (e) {
+        window.location.href = '/workspace';
+    }
+}
+
+async function deleteProjectFromDashboard(projectId, event) {
+    event.stopPropagation();
+
+    if (!confirm('Delete this project? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            loadDashboardProjects();
+        }
+    } catch (e) {
+        console.error('Error deleting project:', e);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const now = new Date();
+    const diff = now - date;
+
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+    if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+
+    return date.toLocaleDateString();
+}
+
+async function loadDashboardProjects() {
+    const grid = document.getElementById('projects-grid');
+    if (!grid) return;
+
+    try {
+        const response = await fetch('/api/projects');
+        const data = await response.json();
+
+        if (data.success && data.projects.length > 0) {
+            grid.innerHTML = data.projects.map(project => `
+                <div class="project-card" onclick="openProject('${project.id}')" style="cursor: pointer;">
+                    <div class="project-preview">
+                        <span class="project-icon">${envIcons[project.environment] || '🎬'}</span>
+                        <span class="project-env">${project.environment || 'jupyter'}</span>
+                    </div>
+                    <div class="project-info">
+                        <h3>${escapeHtml(project.name || 'Untitled')}</h3>
+                        <p>${formatDate(project.modified_at)} ${project.has_artifacts ? '• ✓ Generated' : '• 📝 Draft'}</p>
+                        <div class="project-actions">
+                            <button class="btn btn-secondary" onclick="openProject('${project.id}')">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteProjectFromDashboard('${project.id}', event)" style="padding: 8px; font-size: 13px;">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            grid.innerHTML = `
+                <div class="project-card empty-projects-card">
+                    <div class="project-preview">
+                        <span class="project-icon">📂</span>
+                    </div>
+                    <div class="project-info">
+                        <h3>No saved projects</h3>
+                        <p>Create a new project to get started</p>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (e) {
+        console.error('Error loading projects:', e);
+    }
+}
+
+// Load projects on page load
+document.addEventListener('DOMContentLoaded', loadDashboardProjects);
+</script>
+{% endblock %}

@@ -29,7 +29,9 @@ build/
 
 # Project output
 output/
+projects/
 *.log
+nul
 
 # Testing
 .coverage

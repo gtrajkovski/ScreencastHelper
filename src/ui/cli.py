@@ -5,7 +5,6 @@ import typer
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..generators.script_generator import ScriptGenerator
 from ..generators.tts_optimizer import TTSOptimizer
@@ -35,21 +34,14 @@ def generate_script(
 
     bullets = bullets_file.read_text(encoding='utf-8')
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Generating script...", total=None)
+    console.print("[cyan]Generating script...[/cyan]")
 
-        generator = ScriptGenerator()
-        script = generator.generate(
-            bullets=bullets,
-            duration_minutes=duration,
-            topic=topic
-        )
-
-        progress.update(task, completed=True)
+    generator = ScriptGenerator()
+    script = generator.generate(
+        bullets=bullets,
+        duration_minutes=duration,
+        topic=topic
+    )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(script.to_markdown(), encoding='utf-8')
@@ -120,21 +112,14 @@ def generate_demo(
 
     script = script_file.read_text(encoding='utf-8')
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Generating demo...", total=None)
+    console.print("[cyan]Generating demo...[/cyan]")
 
-        generator = DemoGenerator()
+    generator = DemoGenerator()
 
-        if use_ai:
-            demo = generator.generate_with_ai(script, requirements, title)
-        else:
-            demo = generator.generate(script, requirements, title, output.name)
-
-        progress.update(task, completed=True)
+    if use_ai:
+        demo = generator.generate_with_ai(script, requirements, title)
+    else:
+        demo = generator.generate(script, requirements, title, output.name)
 
     demo.save(str(output))
 

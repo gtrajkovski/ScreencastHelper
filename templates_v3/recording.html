@@ -1,0 +1,602 @@
+{% extends "base.html" %}
+
+{% block title %}Recording Studio - ScreenCast Studio{% endblock %}
+
+{% block content %}
+<div class="recording-studio">
+    <!-- Header -->
+    <header class="workspace-header">
+        <div class="header-left">
+            <a href="/workspace" class="back-btn">← Back to Workspace</a>
+            <span class="divider">|</span>
+            <span>🎙️ Recording Studio</span>
+        </div>
+        <div class="header-center">
+            <span id="recording-status" class="recording-status hidden">
+                <span class="rec-dot"></span>
+                <span id="rec-time">00:00</span>
+            </span>
+        </div>
+        <div class="header-right">
+            <button id="screen-record-btn" class="btn btn-danger">⏺ Screen Record</button>
+            <a href="/export" class="btn btn-primary">Export Package →</a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="recording-main">
+        <!-- Left - Teleprompter -->
+        <div class="panel teleprompter-panel">
+            <div class="panel-header">
+                <h3>📜 Teleprompter</h3>
+                <span id="section-counter">Section 1 of 7</span>
+            </div>
+
+            <div class="teleprompter-content">
+                <h4 id="section-title" class="section-title">HOOK</h4>
+                <div id="teleprompter-text" class="teleprompter-text"></div>
+            </div>
+
+            <div class="teleprompter-controls">
+                <button id="prev-btn" class="btn" disabled>← Previous</button>
+                <button id="next-btn" class="btn btn-primary">Next →</button>
+            </div>
+        </div>
+
+        <!-- Center - Demo Preview -->
+        <div class="panel demo-panel">
+            <div class="panel-header">
+                <h3>💻 Demo Preview</h3>
+                <span class="env-badge" id="env-badge">Jupyter Notebook</span>
+            </div>
+
+            <div class="demo-preview-content" id="demo-area">
+                <div class="notebook-frame">
+                    <div class="notebook-header">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                        <span class="notebook-title">demo.ipynb</span>
+                    </div>
+                    <div id="cells-container">
+                        <!-- Cells will be added here -->
+                    </div>
+                </div>
+
+                <div class="execute-prompt">
+                    <p>Cell <span id="current-cell">1</span> of <span id="total-cells">5</span></p>
+                    <button id="execute-btn" class="btn btn-success btn-large">⏎ Execute Next Cell</button>
+                    <button id="reset-cells-btn" class="btn">↺ Reset All</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right - Sections -->
+        <div class="panel sections-panel">
+            <div class="panel-header">
+                <h3>📋 Sections</h3>
+            </div>
+
+            <div class="sections-list" id="sections-list">
+                <!-- Sections will be populated by JS -->
+            </div>
+
+            <div class="record-controls">
+                <button id="record-btn" class="btn btn-success btn-large">⏺ Start Recording</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Screen Record Modal -->
+    <div id="screen-record-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>🎬 Screen Recording</h2>
+            <p>Configure screen capture region:</p>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>X Position</label>
+                    <input type="number" id="rec-x" value="100">
+                </div>
+                <div class="form-group">
+                    <label>Y Position</label>
+                    <input type="number" id="rec-y" value="100">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Width</label>
+                    <input type="number" id="rec-width" value="1280">
+                </div>
+                <div class="form-group">
+                    <label>Height</label>
+                    <input type="number" id="rec-height" value="720">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Output File</label>
+                <input type="text" id="rec-filename" value="screencast.mov">
+            </div>
+            <div class="form-group">
+                <label>FPS</label>
+                <select id="rec-fps">
+                    <option value="24">24 fps</option>
+                    <option value="30" selected>30 fps</option>
+                    <option value="60">60 fps</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button id="cancel-record" class="btn">Cancel</button>
+                <button id="start-screen-record" class="btn btn-danger">⏺ Start Recording</button>
+            </div>
+
+            <div id="recording-active" class="recording-active hidden">
+                <div class="rec-indicator">
+                    <span class="rec-dot"></span>
+                    <span>Recording... <span id="screen-rec-time">00:00</span></span>
+                </div>
+                <button id="stop-screen-record" class="btn btn-danger btn-large">⏹ Stop Recording</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.modal.hidden { display: none; }
+.modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+    width: 400px;
+}
+.modal-content h2 { margin-bottom: 16px; }
+.modal-content p { color: var(--text-secondary); margin-bottom: 16px; }
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+.modal-actions .btn { flex: 1; }
+.recording-active {
+    margin-top: 24px;
+    padding: 16px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--accent-danger);
+    border-radius: 8px;
+    text-align: center;
+}
+.recording-active.hidden { display: none; }
+.rec-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    color: var(--accent-danger);
+}
+.notebook-cell {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+    opacity: 0.4;
+    transition: all 0.3s;
+}
+.notebook-cell.executed {
+    opacity: 1;
+    background: rgba(16, 185, 129, 0.05);
+}
+.notebook-cell.current {
+    opacity: 1;
+    border-left: 3px solid var(--accent-primary);
+}
+.cell-output {
+    margin-top: 8px;
+    padding: 8px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    display: none;
+}
+.notebook-cell.executed .cell-output {
+    display: block;
+}
+</style>
+
+<script>
+    // Default demo content (used when no package generated)
+    let sections = [
+        { id: 'hook', title: 'HOOK', duration: '0:45',
+          text: 'Generate a package from the Workspace to see content here.' },
+        { id: 'objective', title: 'OBJECTIVE', duration: '0:45',
+          text: 'Your learning objectives will appear here.' },
+        { id: 'content', title: 'CONTENT', duration: '4:00',
+          text: 'Main teaching content will appear here.' },
+        { id: 'summary', title: 'SUMMARY', duration: '0:30',
+          text: 'Key takeaways will appear here.' },
+        { id: 'cta', title: 'CALL TO ACTION', duration: '0:30',
+          text: 'Call to action will appear here.' }
+    ];
+
+    // Default demo cells
+    let cells = [
+        { input: '# Generate a package to see demo code', output: '' }
+    ];
+
+    let currentSection = 0;
+    let currentCell = 0;
+    let isRecording = false;
+    let recordingTimer = null;
+    let recordingSeconds = 0;
+    let screenRecordingActive = false;
+    let screenRecordingTimer = null;
+    let screenRecordingSeconds = 0;
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadProjectData();
+        renderSections();
+        renderCells();
+        updateSection();
+        updateCellDisplay();
+    });
+
+    // Load project data from API
+    async function loadProjectData() {
+        try {
+            const response = await fetch('/api/project');
+            const data = await response.json();
+
+            if (data.success && data.project) {
+                const project = data.project;
+
+                // Parse script into sections if available
+                if (project.artifacts && project.artifacts['narration_script.md']) {
+                    sections = parseScriptToSections(project.artifacts['narration_script.md']);
+                }
+
+                // Parse notebook/demo into cells if available
+                if (project.artifacts) {
+                    if (project.artifacts['demo.ipynb']) {
+                        cells = parseNotebookToCells(project.artifacts['demo.ipynb']);
+                    } else if (project.artifacts['demo.py']) {
+                        cells = parsePythonToCells(project.artifacts['demo.py']);
+                    }
+                }
+
+                // Update environment badge
+                const envBadge = document.getElementById('env-badge');
+                const envNames = {
+                    'jupyter': 'Jupyter Notebook',
+                    'terminal': 'Terminal',
+                    'vscode': 'VS Code',
+                    'ipython': 'IPython',
+                    'pycharm': 'PyCharm'
+                };
+                envBadge.textContent = envNames[project.environment] || 'Jupyter Notebook';
+            }
+        } catch (error) {
+            console.log('Using default content:', error);
+        }
+    }
+
+    // Parse markdown script into sections
+    function parseScriptToSections(script) {
+        const parsed = [];
+        const sectionPatterns = [
+            { pattern: /##?\s*(HOOK|Hook)[\s\S]*?(?=##?\s*(?:OBJECTIVE|CONTENT|SUMMARY|CTA|$))/i, id: 'hook', title: 'HOOK' },
+            { pattern: /##?\s*(OBJECTIVE|Objective)[\s\S]*?(?=##?\s*(?:CONTENT|SUMMARY|CTA|$))/i, id: 'objective', title: 'OBJECTIVE' },
+            { pattern: /##?\s*(CONTENT|Content)[\s\S]*?(?=##?\s*(?:SUMMARY|CTA|$))/i, id: 'content', title: 'CONTENT' },
+            { pattern: /##?\s*(SUMMARY|Summary)[\s\S]*?(?=##?\s*(?:CTA|CALL|$))/i, id: 'summary', title: 'SUMMARY' },
+            { pattern: /##?\s*(CTA|CALL TO ACTION|Call to Action)[\s\S]*$/i, id: 'cta', title: 'CALL TO ACTION' }
+        ];
+
+        for (const sp of sectionPatterns) {
+            const match = script.match(sp.pattern);
+            if (match) {
+                const text = match[0].replace(/^##?\s*\w+[\s:]*\n?/i, '').trim();
+                parsed.push({
+                    id: sp.id,
+                    title: sp.title,
+                    duration: estimateDuration(text),
+                    text: text
+                });
+            }
+        }
+
+        // If no sections found, create one with full text
+        if (parsed.length === 0) {
+            parsed.push({
+                id: 'content',
+                title: 'SCRIPT',
+                duration: estimateDuration(script),
+                text: script
+            });
+        }
+
+        return parsed;
+    }
+
+    function estimateDuration(text) {
+        const words = text.split(/\s+/).length;
+        const minutes = Math.ceil(words / 150);
+        return `${minutes}:00`;
+    }
+
+    // Parse Jupyter notebook JSON into cells
+    function parseNotebookToCells(notebookJson) {
+        try {
+            const notebook = JSON.parse(notebookJson);
+            const codeCells = notebook.cells.filter(c => c.cell_type === 'code');
+            return codeCells.map(cell => ({
+                input: Array.isArray(cell.source) ? cell.source.join('') : cell.source,
+                output: cell.outputs && cell.outputs.length > 0
+                    ? extractOutput(cell.outputs[0])
+                    : '# Output will appear here'
+            }));
+        } catch (e) {
+            return [{ input: '# Error parsing notebook', output: '' }];
+        }
+    }
+
+    function extractOutput(output) {
+        if (output.text) return Array.isArray(output.text) ? output.text.join('') : output.text;
+        if (output.data && output.data['text/plain']) return output.data['text/plain'];
+        return '# Output';
+    }
+
+    // Parse Python script into cells
+    function parsePythonToCells(code) {
+        // Split by function definitions or block comments
+        const blocks = code.split(/\n(?=def |class |# ={3,}|"""|if __name__)/).filter(b => b.trim());
+        return blocks.map(block => ({
+            input: block.trim(),
+            output: '# Run to see output'
+        }));
+    }
+
+    function renderSections() {
+        const list = document.getElementById('sections-list');
+        list.innerHTML = sections.map((s, i) => `
+            <button class="section-item ${i === 0 ? 'active' : ''}" data-index="${i}">
+                <div class="section-info">
+                    <span class="section-name">${s.title}</span>
+                    <span class="section-duration">${s.duration}</span>
+                </div>
+                <div class="section-status">
+                    <span class="status-dot ${i === 0 ? '' : 'pending'}"></span>
+                    <span>${i === 0 ? 'Current' : 'Pending'}</span>
+                </div>
+            </button>
+        `).join('');
+
+        // Add click handlers
+        document.querySelectorAll('.section-item').forEach(item => {
+            item.addEventListener('click', () => {
+                currentSection = parseInt(item.dataset.index);
+                updateSection();
+            });
+        });
+    }
+
+    function renderCells() {
+        const container = document.getElementById('cells-container');
+        container.innerHTML = cells.map((cell, i) => `
+            <div class="notebook-cell ${i === 0 ? 'current' : ''}" data-index="${i}">
+                <div class="cell-label">In [${i + 1}]:</div>
+                <pre class="cell-code">${escapeHtml(cell.input)}</pre>
+                <div class="cell-output">
+                    <div class="cell-label">Out [${i + 1}]:</div>
+                    <pre>${escapeHtml(cell.output)}</pre>
+                </div>
+            </div>
+        `).join('');
+
+        document.getElementById('total-cells').textContent = cells.length;
+    }
+
+    function updateSection() {
+        const section = sections[currentSection];
+        document.getElementById('section-counter').textContent = `Section ${currentSection + 1} of ${sections.length}`;
+        document.getElementById('section-title').textContent = section.title;
+        document.getElementById('teleprompter-text').innerHTML = section.text.split('\n').map(line => {
+            if (line.includes('[PAUSE]')) {
+                return `<p class="pause-marker">${line}</p>`;
+            } else if (line.includes('[')) {
+                return `<p class="visual-cue">${line}</p>`;
+            }
+            return `<p>${line}</p>`;
+        }).join('');
+
+        document.getElementById('prev-btn').disabled = currentSection === 0;
+        document.getElementById('next-btn').disabled = currentSection === sections.length - 1;
+
+        // Update section list
+        document.querySelectorAll('.section-item').forEach((item, i) => {
+            item.classList.toggle('active', i === currentSection);
+            const dot = item.querySelector('.status-dot');
+            const text = item.querySelector('.section-status span:last-child');
+            if (i < currentSection) {
+                dot.className = 'status-dot done';
+                text.textContent = 'Done';
+            } else if (i === currentSection) {
+                dot.className = 'status-dot';
+                text.textContent = 'Current';
+            } else {
+                dot.className = 'status-dot pending';
+                text.textContent = 'Pending';
+            }
+        });
+    }
+
+    function updateCellDisplay() {
+        document.querySelectorAll('.notebook-cell').forEach((cell, i) => {
+            cell.classList.remove('current', 'executed');
+            if (i < currentCell) {
+                cell.classList.add('executed');
+            } else if (i === currentCell) {
+                cell.classList.add('current');
+            }
+        });
+        document.getElementById('current-cell').textContent = Math.min(currentCell + 1, cells.length);
+    }
+
+    // Execute next cell
+    document.getElementById('execute-btn').addEventListener('click', () => {
+        if (currentCell < cells.length) {
+            const cellEl = document.querySelectorAll('.notebook-cell')[currentCell];
+            cellEl.classList.remove('current');
+            cellEl.classList.add('executed');
+
+            currentCell++;
+            updateCellDisplay();
+
+            // Scroll to current cell
+            if (currentCell < cells.length) {
+                document.querySelectorAll('.notebook-cell')[currentCell].scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }
+        }
+    });
+
+    // Reset cells
+    document.getElementById('reset-cells-btn').addEventListener('click', () => {
+        currentCell = 0;
+        updateCellDisplay();
+    });
+
+    // Navigation
+    document.getElementById('next-btn').addEventListener('click', () => {
+        if (currentSection < sections.length - 1) {
+            currentSection++;
+            updateSection();
+        }
+    });
+
+    document.getElementById('prev-btn').addEventListener('click', () => {
+        if (currentSection > 0) {
+            currentSection--;
+            updateSection();
+        }
+    });
+
+    // Recording
+    document.getElementById('record-btn').addEventListener('click', function() {
+        isRecording = !isRecording;
+        this.textContent = isRecording ? '⏹ Stop Recording' : '⏺ Start Recording';
+        this.classList.toggle('btn-success', !isRecording);
+        this.classList.toggle('btn-danger', isRecording);
+        document.getElementById('recording-status').classList.toggle('hidden', !isRecording);
+
+        if (isRecording) {
+            recordingSeconds = 0;
+            recordingTimer = setInterval(() => {
+                recordingSeconds++;
+                document.getElementById('rec-time').textContent = formatTime(recordingSeconds);
+            }, 1000);
+        } else {
+            clearInterval(recordingTimer);
+        }
+    });
+
+    // Screen recording modal
+    document.getElementById('screen-record-btn').addEventListener('click', () => {
+        document.getElementById('screen-record-modal').classList.remove('hidden');
+    });
+
+    document.getElementById('cancel-record').addEventListener('click', () => {
+        document.getElementById('screen-record-modal').classList.add('hidden');
+    });
+
+    document.getElementById('start-screen-record').addEventListener('click', async () => {
+        const config = {
+            x: document.getElementById('rec-x').value,
+            y: document.getElementById('rec-y').value,
+            width: document.getElementById('rec-width').value,
+            height: document.getElementById('rec-height').value,
+            filename: document.getElementById('rec-filename').value,
+            fps: document.getElementById('rec-fps').value
+        };
+
+        try {
+            const response = await fetch('/api/start-screen-record', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                document.getElementById('recording-active').classList.remove('hidden');
+                document.getElementById('start-screen-record').classList.add('hidden');
+                screenRecordingActive = true;
+                screenRecordingSeconds = 0;
+                screenRecordingTimer = setInterval(() => {
+                    screenRecordingSeconds++;
+                    document.getElementById('screen-rec-time').textContent = formatTime(screenRecordingSeconds);
+                }, 1000);
+            } else {
+                alert('Failed to start recording: ' + data.message);
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+
+    document.getElementById('stop-screen-record').addEventListener('click', async () => {
+        try {
+            const response = await fetch('/api/stop-screen-record', { method: 'POST' });
+            const data = await response.json();
+
+            clearInterval(screenRecordingTimer);
+            document.getElementById('recording-active').classList.add('hidden');
+            document.getElementById('start-screen-record').classList.remove('hidden');
+            document.getElementById('screen-record-modal').classList.add('hidden');
+            screenRecordingActive = false;
+
+            if (data.success) {
+                alert('Recording saved to: ' + data.filename);
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+</script>
+
+<style>
+.visual-cue {
+    color: var(--accent-secondary);
+    font-size: 14px;
+    font-style: italic;
+}
+.pause-marker {
+    color: var(--accent-warning);
+    font-size: 14px;
+}
+</style>
+{% endblock %}

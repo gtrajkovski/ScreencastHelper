@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScreenCast Studio</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">&#127916;</span>
+                <span class="logo-text">ScreenCast Studio</span>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-tab="script">
+                    <span class="nav-icon">&#128221;</span>
+                    Script Generator
+                </li>
+                <li class="nav-item" data-tab="tts">
+                    <span class="nav-icon">&#128266;</span>
+                    TTS Optimizer
+                </li>
+                <li class="nav-item" data-tab="demo">
+                    <span class="nav-icon">&#128187;</span>
+                    Demo Generator
+                </li>
+                <li class="nav-item" data-tab="assets">
+                    <span class="nav-icon">&#128450;</span>
+                    Asset Generator
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Script Generator Tab -->
+            <section id="script-tab" class="tab-content active">
+                <h1>Script Generator</h1>
+                <p class="subtitle">Generate professional narration scripts from bullet points</p>
+
+                <div class="form-grid">
+                    <div class="input-section">
+                        <div class="form-group">
+                            <label for="topic">Topic / Title</label>
+                            <input type="text" id="topic" placeholder="e.g., Data Drift Detection in ML Pipelines">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="duration">Duration (minutes)</label>
+                                <input type="number" id="duration" value="7" min="1" max="30">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="bullets">Bullet Points</label>
+                            <textarea id="bullets" rows="12" placeholder="Enter your bullet points here...
+
+## Key Points
+- Point 1
+- Point 2
+- Point 3
+
+## Demo Requirements
+- Show: [what to demonstrate]
+- Data: [sample data needed]"></textarea>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="generateScript()">
+                            <span class="btn-icon">&#9889;</span>
+                            Generate Script
+                        </button>
+                    </div>
+
+                    <div class="output-section">
+                        <div class="output-header">
+                            <h3>Generated Script</h3>
+                            <div class="output-actions">
+                                <span id="script-stats" class="stats"></span>
+                                <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('script-output')">Copy</button>
+                                <button class="btn btn-secondary btn-sm" onclick="downloadContent('script-output', 'script.md')">Download</button>
+                                <button class="btn btn-secondary btn-sm" onclick="sendToTTS()">Send to TTS</button>
+                            </div>
+                        </div>
+                        <div id="script-output" class="output-content" contenteditable="true"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TTS Optimizer Tab -->
+            <section id="tts-tab" class="tab-content">
+                <h1>TTS Optimizer</h1>
+                <p class="subtitle">Optimize scripts for natural text-to-speech pronunciation</p>
+
+                <div class="form-grid">
+                    <div class="input-section">
+                        <div class="form-group">
+                            <label for="tts-format">Output Format</label>
+                            <select id="tts-format">
+                                <option value="plain">Plain Text</option>
+                                <option value="ssml">SSML (Amazon Polly, Google TTS)</option>
+                                <option value="elevenlabs">ElevenLabs</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="tts-input">Script to Optimize</label>
+                            <textarea id="tts-input" rows="15" placeholder="Paste your narration script here..."></textarea>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="optimizeTTS()">
+                            <span class="btn-icon">&#128266;</span>
+                            Optimize for TTS
+                        </button>
+                    </div>
+
+                    <div class="output-section">
+                        <div class="output-header">
+                            <h3>Optimized Script</h3>
+                            <div class="output-actions">
+                                <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('tts-output')">Copy</button>
+                                <button class="btn btn-secondary btn-sm" onclick="downloadContent('tts-output', 'script_tts.txt')">Download</button>
+                            </div>
+                        </div>
+                        <div id="tts-output" class="output-content"></div>
+                        <div id="tts-changes" class="changes-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Demo Generator Tab -->
+            <section id="demo-tab" class="tab-content">
+                <h1>Demo Generator</h1>
+                <p class="subtitle">Create interactive Python demos with teleprompter prompts</p>
+
+                <div class="form-grid">
+                    <div class="input-section">
+                        <div class="form-group">
+                            <label for="demo-title">Demo Title</label>
+                            <input type="text" id="demo-title" placeholder="e.g., Data Drift Detection Demo">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="demo-requirements">Demo Requirements</label>
+                            <textarea id="demo-requirements" rows="4" placeholder="Describe what the demo should show...
+
+e.g., Load datasets, run drift detection, display HTML report"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="demo-script">Source Script</label>
+                            <textarea id="demo-script" rows="10" placeholder="Paste the narration script to base the demo on..."></textarea>
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="demo-use-ai">
+                                Use AI for sophisticated demo generation
+                            </label>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="generateDemo()">
+                            <span class="btn-icon">&#128187;</span>
+                            Generate Demo
+                        </button>
+                    </div>
+
+                    <div class="output-section">
+                        <div class="output-header">
+                            <h3>Generated Demo Code</h3>
+                            <div class="output-actions">
+                                <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('demo-output')">Copy</button>
+                                <button class="btn btn-secondary btn-sm" onclick="downloadContent('demo-output', 'demo.py')">Download</button>
+                            </div>
+                        </div>
+                        <pre id="demo-output" class="output-content code"></pre>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Asset Generator Tab -->
+            <section id="assets-tab" class="tab-content">
+                <h1>Asset Generator</h1>
+                <p class="subtitle">Generate supporting files for your screencast</p>
+
+                <div class="asset-grid">
+                    <!-- CSV Generator -->
+                    <div class="asset-card">
+                        <div class="asset-icon">&#128202;</div>
+                        <h3>Sample CSV</h3>
+                        <p>Generate sample data with optional quality issues</p>
+                        <div class="form-group">
+                            <label>Columns (comma-separated)</label>
+                            <input type="text" id="csv-columns" value="date,id,amount,category">
+                        </div>
+                        <div class="form-group">
+                            <label>Rows</label>
+                            <input type="number" id="csv-rows" value="10" min="1" max="100">
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="csv-issues" checked>
+                                Include data quality issues
+                            </label>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="generateAsset('csv')">Generate CSV</button>
+                    </div>
+
+                    <!-- Terminal Output Generator -->
+                    <div class="asset-card">
+                        <div class="asset-icon">&#128433;</div>
+                        <h3>Terminal Output</h3>
+                        <p>Colorful validation terminal output</p>
+                        <div class="form-group">
+                            <label>Validation Checks (JSON)</label>
+                            <textarea id="terminal-checks" rows="5">[
+  {"check": "Schema validation", "status": "pass", "message": "All columns present"},
+  {"check": "Null check", "status": "fail", "message": "3 rows with null values"},
+  {"check": "Type validation", "status": "pass", "message": "All types match"}
+]</textarea>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="generateAsset('terminal')">Generate Script</button>
+                    </div>
+
+                    <!-- YAML Lineage Generator -->
+                    <div class="asset-card">
+                        <div class="asset-icon">&#128279;</div>
+                        <h3>Data Lineage YAML</h3>
+                        <p>Data lineage documentation</p>
+                        <div class="form-group">
+                            <label>Source Table</label>
+                            <input type="text" id="yaml-source" value="raw_events">
+                        </div>
+                        <div class="form-group">
+                            <label>Target Table</label>
+                            <input type="text" id="yaml-target" value="analytics_events">
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="generateAsset('yaml')">Generate YAML</button>
+                    </div>
+
+                    <!-- HTML Report Generator -->
+                    <div class="asset-card">
+                        <div class="asset-icon">&#128196;</div>
+                        <h3>HTML Report</h3>
+                        <p>Dark-themed validation report</p>
+                        <div class="form-group">
+                            <label>Report Title</label>
+                            <input type="text" id="html-title" value="Validation Report">
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="generateAsset('html')">Generate Report</button>
+                    </div>
+                </div>
+
+                <!-- Asset Output -->
+                <div class="asset-output" id="asset-output-container" style="display: none;">
+                    <div class="output-header">
+                        <h3 id="asset-filename">Generated Asset</h3>
+                        <div class="output-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('asset-output')">Copy</button>
+                            <button class="btn btn-secondary btn-sm" id="asset-download-btn">Download</button>
+                            <button class="btn btn-secondary btn-sm" id="asset-preview-btn" style="display: none;">Preview</button>
+                        </div>
+                    </div>
+                    <pre id="asset-output" class="output-content code"></pre>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+        <p>Generating with AI...</p>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

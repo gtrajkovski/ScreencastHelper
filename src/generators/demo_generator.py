@@ -24,6 +24,8 @@ class GeneratedDemo:
 
     def save(self, filepath: str):
         """Save demo script to file."""
+        from pathlib import Path
+        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(self.code)
 

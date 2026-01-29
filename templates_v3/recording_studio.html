@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recording Studio - ScreenCast Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-color: #0a0a0f;
+            --text-color: #f0f0f5;
+            --accent-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 1rem;
+            background: rgba(0,0,0,0.6);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .project-name {
+            font-size: 0.875rem;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.5rem 0.75rem;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 0.5rem;
+            color: white;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .btn-active {
+            background: var(--accent-color);
+        }
+
+        /* Main Layout */
+        .main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            width: 300px;
+            background: rgba(0,0,0,0.4);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            overflow-y: auto;
+            padding: 1rem;
+            transition: width 0.3s, padding 0.3s, opacity 0.3s;
+        }
+
+        .settings-panel.collapsed {
+            width: 0;
+            padding: 0;
+            overflow: hidden;
+            opacity: 0;
+        }
+
+        .settings-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .settings-title {
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: rgba(255,255,255,0.4);
+            margin-bottom: 0.75rem;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .control-label {
+            font-size: 0.8125rem;
+        }
+
+        .control-value {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .small-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 0.375rem;
+            color: white;
+            cursor: pointer;
+            font-size: 1.125rem;
+        }
+
+        .small-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .value-display {
+            min-width: 48px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        /* Quick size buttons */
+        .quick-sizes {
+            display: flex;
+            gap: 0.375rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .quick-sizes button {
+            flex: 1;
+            padding: 0.375rem;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 0.375rem;
+            color: white;
+            cursor: pointer;
+            font-size: 0.6875rem;
+        }
+
+        .quick-sizes button:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .quick-sizes button.active {
+            background: var(--accent-color);
+        }
+
+        /* Color grid */
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .color-btn {
+            aspect-ratio: 1;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .color-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .color-btn.active {
+            border-color: var(--accent-color);
+        }
+
+        /* Color inputs */
+        .color-inputs {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .color-input-group {
+            flex: 1;
+        }
+
+        .color-input-group label {
+            font-size: 0.6875rem;
+            color: rgba(255,255,255,0.5);
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .color-input-row {
+            display: flex;
+            gap: 0.375rem;
+        }
+
+        .color-input-row input[type="color"] {
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .color-input-row input[type="text"] {
+            flex: 1;
+            padding: 0.375rem;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 0.375rem;
+            color: white;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+
+        /* Select */
+        .select {
+            width: 100%;
+            padding: 0.5rem;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 0.5rem;
+            color: white;
+            font-size: 0.875rem;
+        }
+
+        .select option {
+            background: #1a1a1a;
+        }
+
+        /* Checkbox */
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+        }
+
+        .checkbox-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent-color);
+        }
+
+        /* Shortcuts help */
+        .shortcuts-help {
+            padding: 0.75rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 0.5rem;
+            font-size: 0.6875rem;
+        }
+
+        .shortcut-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+        }
+
+        .kbd {
+            background: rgba(255,255,255,0.1);
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+        }
+
+        /* Teleprompter Area */
+        .teleprompter-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Section tabs */
+        .section-tabs {
+            display: flex;
+            gap: 0.25rem;
+            padding: 0.5rem 1rem;
+            background: rgba(0,0,0,0.3);
+            overflow-x: auto;
+        }
+
+        .section-tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .section-tab {
+            padding: 0.5rem 1rem;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 0.5rem;
+            color: rgba(255,255,255,0.7);
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .section-tab:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .section-tab.active {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .section-tab.completed {
+            background: rgba(16, 185, 129, 0.2);
+        }
+
+        /* Teleprompter scroll */
+        .teleprompter-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 3rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .teleprompter-content {
+            max-width: 900px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .teleprompter-content.mirrored {
+            transform: scaleX(-1);
+        }
+
+        /* Cue card */
+        .cue-card {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--warning-color);
+        }
+
+        .cue-card.hidden {
+            display: none;
+        }
+
+        /* Section title */
+        .section-title {
+            color: var(--accent-color);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+        }
+
+        /* Time display */
+        .section-time {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.4);
+            margin-bottom: 1.5rem;
+        }
+
+        /* Script content */
+        .script-content {
+            text-align: center;
+        }
+
+        .script-content .cue {
+            color: var(--accent-color);
+            font-style: italic;
+            opacity: 0.8;
+        }
+
+        .script-content .bullet {
+            margin-left: 2rem;
+            text-align: left;
+        }
+
+        .script-content .line {
+            margin-bottom: 0.5em;
+        }
+
+        /* Bottom controls */
+        .bottom-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: rgba(0,0,0,0.5);
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .nav-btns {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .progress-info {
+            text-align: center;
+        }
+
+        .progress-text {
+            font-size: 0.875rem;
+        }
+
+        .progress-sub {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.5);
+        }
+
+        .scroll-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .scroll-btn {
+            padding: 0.625rem 1.25rem;
+            background: var(--accent-color);
+            border: none;
+            border-radius: 0.5rem;
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .scroll-btn:hover {
+            background: #0ea472;
+        }
+
+        .scroll-btn.active {
+            background: var(--danger-color);
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: rgba(255,255,255,0.4);
+            text-align: center;
+        }
+
+        .empty-state .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state p {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">
+                <span>🎬</span>
+                <span>Recording Studio</span>
+            </div>
+            <span style="color: rgba(255,255,255,0.3)">|</span>
+            <span class="project-name" id="project-name">Loading...</span>
+        </div>
+        <div class="header-right">
+            <button class="btn" id="toggle-settings-btn">⚙️ Settings</button>
+            <button class="btn" id="fullscreen-btn">⛶ Fullscreen</button>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="main">
+        <!-- Settings Panel -->
+        <aside class="settings-panel" id="settings-panel">
+            <!-- Text Size -->
+            <div class="settings-section">
+                <div class="settings-title">📝 Text Size</div>
+
+                <div class="control-row">
+                    <span class="control-label">Font Size</span>
+                    <div class="control-value">
+                        <button class="small-btn" id="font-size-down">−</button>
+                        <span class="value-display" id="font-size-value">36px</span>
+                        <button class="small-btn" id="font-size-up">+</button>
+                    </div>
+                </div>
+
+                <div class="quick-sizes" id="quick-sizes">
+                    <button data-size="24">24</button>
+                    <button data-size="32">32</button>
+                    <button data-size="40" class="active">40</button>
+                    <button data-size="48">48</button>
+                    <button data-size="56">56</button>
+                    <button data-size="64">64</button>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">Line Height</span>
+                    <div class="control-value">
+                        <button class="small-btn" id="line-height-down">−</button>
+                        <span class="value-display" id="line-height-value">1.8</span>
+                        <button class="small-btn" id="line-height-up">+</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">Font</span>
+                </div>
+                <select class="select" id="font-family">
+                    <option value="Inter">Inter</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="system-ui">System UI</option>
+                    <option value="Courier New">Courier New</option>
+                </select>
+            </div>
+
+            <!-- Background -->
+            <div class="settings-section">
+                <div class="settings-title">🎨 Background</div>
+
+                <div class="color-grid" id="bg-presets">
+                    <button class="color-btn active" data-bg="#0a0a0f" data-text="#f0f0f5" style="background:#0a0a0f" title="Dark"></button>
+                    <button class="color-btn" data-bg="#000000" data-text="#ffffff" style="background:#000000" title="Black"></button>
+                    <button class="color-btn" data-bg="#1a1a1a" data-text="#e8e8e8" style="background:#1a1a1a" title="Charcoal"></button>
+                    <button class="color-btn" data-bg="#0a192f" data-text="#ccd6f6" style="background:#0a192f" title="Navy"></button>
+                    <button class="color-btn" data-bg="#0d1f0d" data-text="#90ee90" style="background:#0d1f0d" title="Forest"></button>
+                    <button class="color-btn" data-bg="#00b140" data-text="#ffffff" style="background:#00b140" title="Green Screen"></button>
+                    <button class="color-btn" data-bg="#0047ab" data-text="#ffffff" style="background:#0047ab" title="Blue Screen"></button>
+                    <button class="color-btn" data-bg="#f8f8f8" data-text="#1a1a1a" style="background:#f8f8f8" title="Light"></button>
+                </div>
+
+                <div class="color-inputs">
+                    <div class="color-input-group">
+                        <label>Background</label>
+                        <div class="color-input-row">
+                            <input type="color" id="bg-color-picker" value="#0a0a0f">
+                            <input type="text" id="bg-color-hex" value="#0a0a0f">
+                        </div>
+                    </div>
+                    <div class="color-input-group">
+                        <label>Text</label>
+                        <div class="color-input-row">
+                            <input type="color" id="text-color-picker" value="#f0f0f5">
+                            <input type="text" id="text-color-hex" value="#f0f0f5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auto-Scroll -->
+            <div class="settings-section">
+                <div class="settings-title">⏱️ Auto-Scroll</div>
+                <div class="control-row">
+                    <span class="control-label">Speed</span>
+                    <div class="control-value">
+                        <button class="small-btn" id="scroll-speed-down">−</button>
+                        <span class="value-display" id="scroll-speed-value">2x</span>
+                        <button class="small-btn" id="scroll-speed-up">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options -->
+            <div class="settings-section">
+                <div class="settings-title">⚡ Options</div>
+                <label class="checkbox-row">
+                    <input type="checkbox" id="show-cues" checked>
+                    <span class="control-label">Show cue cards</span>
+                </label>
+                <label class="checkbox-row">
+                    <input type="checkbox" id="mirror-text">
+                    <span class="control-label">Mirror text</span>
+                </label>
+            </div>
+
+            <!-- Shortcuts -->
+            <div class="shortcuts-help">
+                <div class="settings-title">Keyboard Shortcuts</div>
+                <div class="shortcut-row">
+                    <span>Next section</span>
+                    <span><span class="kbd">→</span> / <span class="kbd">Space</span></span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Prev section</span>
+                    <span class="kbd">←</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Bigger text</span>
+                    <span class="kbd">↑</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Smaller text</span>
+                    <span class="kbd">↓</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Toggle scroll</span>
+                    <span class="kbd">S</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Fullscreen</span>
+                    <span class="kbd">F</span>
+                </div>
+                <div class="shortcut-row">
+                    <span>Hide settings</span>
+                    <span class="kbd">Esc</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Teleprompter -->
+        <div class="teleprompter-area">
+            <!-- Section tabs -->
+            <div class="section-tabs" id="section-tabs">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Script content -->
+            <div class="teleprompter-scroll" id="teleprompter-scroll">
+                <div class="teleprompter-content" id="teleprompter-content">
+                    <div class="cue-card" id="cue-card">
+                        🎬 <span id="cue-text"></span>
+                    </div>
+                    <div class="section-title" id="section-title-display"></div>
+                    <div class="section-time" id="section-time"></div>
+                    <div class="script-content" id="script-content"></div>
+                </div>
+            </div>
+
+            <!-- Bottom controls -->
+            <div class="bottom-controls">
+                <div class="nav-btns">
+                    <button class="btn" id="prev-btn">← Previous</button>
+                    <button class="btn" id="next-btn">Next →</button>
+                </div>
+                <div class="progress-info">
+                    <div class="progress-text" id="progress-text">Section 1 of 7</div>
+                    <div class="progress-sub" id="progress-sub">0:00 - 0:45</div>
+                </div>
+                <div class="scroll-controls">
+                    <div class="control-value">
+                        <button class="small-btn" id="scroll-down">−</button>
+                        <span id="scroll-display" style="font-size:0.75rem;min-width:40px;text-align:center">2x</span>
+                        <button class="small-btn" id="scroll-up">+</button>
+                    </div>
+                    <button class="scroll-btn" id="scroll-btn">▶ Scroll</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // State
+        let state = {
+            fontSize: 36,
+            lineHeight: 1.8,
+            fontFamily: 'Inter',
+            bgColor: '#0a0a0f',
+            textColor: '#f0f0f5',
+            scrollSpeed: 2,
+            isScrolling: false,
+            showCues: true,
+            mirrorText: false,
+            currentSection: 0,
+            sections: []
+        };
+
+        // DOM elements
+        const elements = {
+            body: document.body,
+            settingsPanel: document.getElementById('settings-panel'),
+            teleprompterContent: document.getElementById('teleprompter-content'),
+            teleprompterScroll: document.getElementById('teleprompter-scroll'),
+            sectionTabs: document.getElementById('section-tabs'),
+            cueCard: document.getElementById('cue-card'),
+            cueText: document.getElementById('cue-text'),
+            sectionTitle: document.getElementById('section-title-display'),
+            sectionTime: document.getElementById('section-time'),
+            scriptContent: document.getElementById('script-content'),
+            progressText: document.getElementById('progress-text'),
+            progressSub: document.getElementById('progress-sub'),
+            fontSizeValue: document.getElementById('font-size-value'),
+            lineHeightValue: document.getElementById('line-height-value'),
+            scrollSpeedValue: document.getElementById('scroll-speed-value'),
+            scrollDisplay: document.getElementById('scroll-display'),
+            scrollBtn: document.getElementById('scroll-btn'),
+            projectName: document.getElementById('project-name')
+        };
+
+        // Default sections (used when no project data)
+        const defaultSections = [
+            {
+                id: 'hook',
+                title: 'HOOK',
+                time: '0:00 - 0:45',
+                content: `Have you ever stared at a slow Python script, wondering which line is the culprit?
+
+[PAUSE - 2 seconds]
+
+Last month, I spent two hours optimizing a data pipeline—only to discover the bottleneck was a single line I'd overlooked.
+
+Two hours wasted because I guessed instead of measured.`,
+                cue: 'Show: Editor with slow script running'
+            },
+            {
+                id: 'objective',
+                title: 'OBJECTIVE',
+                time: '0:45 - 1:15',
+                content: `By the end of this video, you'll be able to:
+
+• Use cProfile to identify exactly where your code spends time
+
+• Read profiling output to find the real bottlenecks
+
+• Apply targeted fixes that deliver measurable speedups`,
+                cue: 'Show: Objectives slide'
+            },
+            {
+                id: 'content1',
+                title: 'CONTENT - What Is a Bottleneck?',
+                time: '1:15 - 2:30',
+                content: `A bottleneck is the slowest part of your code—the constraint that limits overall performance.
+
+[PAUSE]
+
+Here's the key insight: ninety percent of execution time typically comes from ten percent of your code.
+
+Finding that ten percent is everything.`,
+                cue: 'Show: Pipeline diagram'
+            },
+            {
+                id: 'content2',
+                title: 'CONTENT - Demo',
+                time: '2:30 - 4:30',
+                content: `Let me show you a real example.
+
+[Switch to Jupyter]
+
+Here's a function that finds duplicates. Watch what happens when we profile it.
+
+[Run cProfile cell]
+
+See that? One million comparisons for just one thousand items.
+
+That nested loop is our bottleneck.`,
+                cue: 'Demo: Jupyter notebook'
+            },
+            {
+                id: 'summary',
+                title: 'SUMMARY',
+                time: '5:30 - 6:15',
+                content: `Let's recap:
+
+• Profile before optimizing—never guess
+
+• Look for the ten percent causing ninety percent of slowdown
+
+• Small algorithmic changes yield massive gains`,
+                cue: 'Show: Summary slide'
+            },
+            {
+                id: 'cta',
+                title: 'CALL TO ACTION',
+                time: '6:15 - 7:00',
+                content: `Next, try the hands-on lab where you'll profile a real script and optimize it yourself.
+
+I'll see you there.`,
+                cue: 'Show: Lab thumbnail'
+            }
+        ];
+
+        // Initialize
+        async function init() {
+            // Try to load from API
+            try {
+                const response = await fetch('/api/recording-data');
+                if (response.ok) {
+                    const data = await response.json();
+                    elements.projectName.textContent = data.project_name || 'Untitled';
+                    if (data.script_sections && data.script_sections.length > 0) {
+                        state.sections = data.script_sections;
+                    } else {
+                        state.sections = defaultSections;
+                        elements.projectName.textContent = 'Demo Project (No script generated)';
+                    }
+                } else {
+                    state.sections = defaultSections;
+                    elements.projectName.textContent = 'Demo Project';
+                }
+            } catch (e) {
+                console.error('Failed to load project data:', e);
+                state.sections = defaultSections;
+                elements.projectName.textContent = 'Demo Project';
+            }
+
+            renderSectionTabs();
+            renderCurrentSection();
+            setupEventListeners();
+            applyStyles();
+        }
+
+        // Render section tabs
+        function renderSectionTabs() {
+            elements.sectionTabs.innerHTML = state.sections.map((section, i) => `
+                <button class="section-tab ${i === state.currentSection ? 'active' : ''} ${i < state.currentSection ? 'completed' : ''}"
+                        data-index="${i}">
+                    ${i < state.currentSection ? '✓ ' : ''}${section.title}
+                </button>
+            `).join('');
+
+            // Add click handlers
+            elements.sectionTabs.querySelectorAll('.section-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    state.currentSection = parseInt(tab.dataset.index);
+                    renderSectionTabs();
+                    renderCurrentSection();
+                    // Reset scroll position
+                    elements.teleprompterScroll.scrollTop = 0;
+                });
+            });
+        }
+
+        // Render current section
+        function renderCurrentSection() {
+            const section = state.sections[state.currentSection];
+            if (!section) {
+                // Show empty state
+                elements.cueCard.classList.add('hidden');
+                elements.sectionTitle.textContent = '';
+                elements.sectionTime.textContent = '';
+                elements.scriptContent.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📝</div>
+                        <p>No script generated yet</p>
+                        <p>Generate a package in the workspace first</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Update cue
+            if (section.cue && state.showCues) {
+                elements.cueCard.classList.remove('hidden');
+                elements.cueText.textContent = section.cue;
+            } else {
+                elements.cueCard.classList.add('hidden');
+            }
+
+            // Update title and time
+            elements.sectionTitle.textContent = section.title;
+            elements.sectionTitle.style.fontSize = `${state.fontSize * 0.5}px`;
+            elements.sectionTime.textContent = section.time || '';
+
+            // Update content
+            elements.scriptContent.innerHTML = formatContent(section.content);
+
+            // Update progress
+            elements.progressText.textContent = `Section ${state.currentSection + 1} of ${state.sections.length}`;
+            elements.progressSub.textContent = section.time || '';
+        }
+
+        // Format content with cues and bullets
+        function formatContent(text) {
+            if (!text) return '';
+            return text.split('\n').map(line => {
+                if (line.startsWith('[') && line.endsWith(']')) {
+                    return `<div class="cue">${escapeHtml(line)}</div>`;
+                }
+                if (line.startsWith('•') || line.startsWith('-')) {
+                    return `<div class="bullet">${escapeHtml(line)}</div>`;
+                }
+                return `<div class="line">${escapeHtml(line) || '&nbsp;'}</div>`;
+            }).join('');
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Apply styles
+        function applyStyles() {
+            document.body.style.background = state.bgColor;
+            document.body.style.color = state.textColor;
+
+            elements.teleprompterContent.style.fontSize = `${state.fontSize}px`;
+            elements.teleprompterContent.style.lineHeight = state.lineHeight;
+            elements.teleprompterContent.style.fontFamily = state.fontFamily;
+
+            if (state.mirrorText) {
+                elements.teleprompterContent.classList.add('mirrored');
+            } else {
+                elements.teleprompterContent.classList.remove('mirrored');
+            }
+
+            elements.fontSizeValue.textContent = `${state.fontSize}px`;
+            elements.lineHeightValue.textContent = state.lineHeight.toFixed(1);
+            elements.scrollSpeedValue.textContent = `${state.scrollSpeed}x`;
+            elements.scrollDisplay.textContent = `${state.scrollSpeed}x`;
+
+            // Update section title size
+            if (elements.sectionTitle) {
+                elements.sectionTitle.style.fontSize = `${state.fontSize * 0.5}px`;
+            }
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Toggle settings
+            document.getElementById('toggle-settings-btn').addEventListener('click', () => {
+                elements.settingsPanel.classList.toggle('collapsed');
+            });
+
+            // Fullscreen
+            document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
+
+            // Font size
+            document.getElementById('font-size-up').addEventListener('click', () => {
+                state.fontSize = Math.min(80, state.fontSize + 4);
+                applyStyles();
+                updateQuickSizes();
+            });
+
+            document.getElementById('font-size-down').addEventListener('click', () => {
+                state.fontSize = Math.max(16, state.fontSize - 4);
+                applyStyles();
+                updateQuickSizes();
+            });
+
+            // Quick sizes
+            document.getElementById('quick-sizes').addEventListener('click', (e) => {
+                if (e.target.dataset.size) {
+                    state.fontSize = parseInt(e.target.dataset.size);
+                    applyStyles();
+                    updateQuickSizes();
+                }
+            });
+
+            // Line height
+            document.getElementById('line-height-up').addEventListener('click', () => {
+                state.lineHeight = Math.min(3, +(state.lineHeight + 0.2).toFixed(1));
+                applyStyles();
+            });
+
+            document.getElementById('line-height-down').addEventListener('click', () => {
+                state.lineHeight = Math.max(1.2, +(state.lineHeight - 0.2).toFixed(1));
+                applyStyles();
+            });
+
+            // Font family
+            document.getElementById('font-family').addEventListener('change', (e) => {
+                state.fontFamily = e.target.value;
+                applyStyles();
+            });
+
+            // Background presets
+            document.getElementById('bg-presets').addEventListener('click', (e) => {
+                const btn = e.target.closest('.color-btn');
+                if (btn) {
+                    state.bgColor = btn.dataset.bg;
+                    state.textColor = btn.dataset.text;
+                    applyStyles();
+                    updateColorInputs();
+                    updateBgPresetActive();
+                }
+            });
+
+            // Color pickers
+            document.getElementById('bg-color-picker').addEventListener('input', (e) => {
+                state.bgColor = e.target.value;
+                document.getElementById('bg-color-hex').value = e.target.value;
+                applyStyles();
+                updateBgPresetActive();
+            });
+
+            document.getElementById('bg-color-hex').addEventListener('change', (e) => {
+                if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
+                    state.bgColor = e.target.value;
+                    document.getElementById('bg-color-picker').value = e.target.value;
+                    applyStyles();
+                    updateBgPresetActive();
+                }
+            });
+
+            document.getElementById('text-color-picker').addEventListener('input', (e) => {
+                state.textColor = e.target.value;
+                document.getElementById('text-color-hex').value = e.target.value;
+                applyStyles();
+            });
+
+            document.getElementById('text-color-hex').addEventListener('change', (e) => {
+                if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
+                    state.textColor = e.target.value;
+                    document.getElementById('text-color-picker').value = e.target.value;
+                    applyStyles();
+                }
+            });
+
+            // Scroll speed (settings panel)
+            document.getElementById('scroll-speed-up').addEventListener('click', () => {
+                state.scrollSpeed = Math.min(5, +(state.scrollSpeed + 0.5).toFixed(1));
+                applyStyles();
+            });
+
+            document.getElementById('scroll-speed-down').addEventListener('click', () => {
+                state.scrollSpeed = Math.max(0.5, +(state.scrollSpeed - 0.5).toFixed(1));
+                applyStyles();
+            });
+
+            // Scroll speed (bottom controls)
+            document.getElementById('scroll-up').addEventListener('click', () => {
+                state.scrollSpeed = Math.min(5, +(state.scrollSpeed + 0.5).toFixed(1));
+                applyStyles();
+            });
+
+            document.getElementById('scroll-down').addEventListener('click', () => {
+                state.scrollSpeed = Math.max(0.5, +(state.scrollSpeed - 0.5).toFixed(1));
+                applyStyles();
+            });
+
+            // Options
+            document.getElementById('show-cues').addEventListener('change', (e) => {
+                state.showCues = e.target.checked;
+                renderCurrentSection();
+            });
+
+            document.getElementById('mirror-text').addEventListener('change', (e) => {
+                state.mirrorText = e.target.checked;
+                applyStyles();
+            });
+
+            // Navigation
+            document.getElementById('prev-btn').addEventListener('click', prevSection);
+            document.getElementById('next-btn').addEventListener('click', nextSection);
+
+            // Scroll toggle
+            document.getElementById('scroll-btn').addEventListener('click', toggleScroll);
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', handleKeyboard);
+        }
+
+        // Navigation helpers
+        function prevSection() {
+            state.currentSection = Math.max(0, state.currentSection - 1);
+            renderSectionTabs();
+            renderCurrentSection();
+            elements.teleprompterScroll.scrollTop = 0;
+        }
+
+        function nextSection() {
+            state.currentSection = Math.min(state.sections.length - 1, state.currentSection + 1);
+            renderSectionTabs();
+            renderCurrentSection();
+            elements.teleprompterScroll.scrollTop = 0;
+        }
+
+        // Toggle fullscreen
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen?.();
+            } else {
+                document.exitFullscreen?.();
+            }
+        }
+
+        // Toggle auto-scroll
+        let scrollInterval = null;
+        function toggleScroll() {
+            state.isScrolling = !state.isScrolling;
+
+            if (state.isScrolling) {
+                elements.scrollBtn.textContent = '⏹ Stop';
+                elements.scrollBtn.classList.add('active');
+                scrollInterval = setInterval(() => {
+                    elements.teleprompterScroll.scrollTop += state.scrollSpeed;
+                }, 50);
+            } else {
+                elements.scrollBtn.textContent = '▶ Scroll';
+                elements.scrollBtn.classList.remove('active');
+                clearInterval(scrollInterval);
+            }
+        }
+
+        // Keyboard handler
+        function handleKeyboard(e) {
+            // Don't handle if typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            switch (e.key) {
+                case ' ':
+                case 'ArrowRight':
+                    e.preventDefault();
+                    nextSection();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    prevSection();
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    state.fontSize = Math.min(80, state.fontSize + 4);
+                    applyStyles();
+                    updateQuickSizes();
+                    break;
+                case 'ArrowDown':
+                    e.preventDefault();
+                    state.fontSize = Math.max(16, state.fontSize - 4);
+                    applyStyles();
+                    updateQuickSizes();
+                    break;
+                case 's':
+                case 'S':
+                    toggleScroll();
+                    break;
+                case 'Escape':
+                    elements.settingsPanel.classList.toggle('collapsed');
+                    break;
+                case 'f':
+                case 'F':
+                    toggleFullscreen();
+                    break;
+            }
+        }
+
+        // Update quick size buttons
+        function updateQuickSizes() {
+            document.querySelectorAll('#quick-sizes button').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.size) === state.fontSize);
+            });
+        }
+
+        // Update color inputs
+        function updateColorInputs() {
+            document.getElementById('bg-color-picker').value = state.bgColor;
+            document.getElementById('bg-color-hex').value = state.bgColor;
+            document.getElementById('text-color-picker').value = state.textColor;
+            document.getElementById('text-color-hex').value = state.textColor;
+        }
+
+        // Update background preset active state
+        function updateBgPresetActive() {
+            document.querySelectorAll('#bg-presets .color-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.bg === state.bgColor);
+            });
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

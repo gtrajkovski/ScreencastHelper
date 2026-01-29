@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+
+{% block title %}Workspace - ScreenCast Studio{% endblock %}
+
+{% block content %}
+<div class="workspace">
+    <!-- Header -->
+    <header class="workspace-header">
+        <div class="header-left">
+            <a href="/" class="back-btn">←</a>
+            <span class="logo-icon">🎬</span>
+            <span class="logo-text">ScreenCast Studio</span>
+            <span class="divider">|</span>
+            <!-- Project Dropdown -->
+            <div class="project-dropdown">
+                <button class="project-selector" id="project-selector">
+                    <span class="project-name" id="project-name">New Project</span>
+                    <span class="unsaved-indicator hidden" id="unsaved-indicator">●</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="project-menu hidden" id="project-menu">
+                    <div class="project-menu-actions">
+                        <button class="menu-btn" onclick="newProject()">📄 New Project</button>
+                        <button class="menu-btn" onclick="saveProject()">💾 Save Project</button>
+                        <button class="menu-btn" onclick="saveProjectAs()">📝 Save As...</button>
+                    </div>
+                    <div class="project-menu-divider"></div>
+                    <div class="project-menu-header">Recent Projects</div>
+                    <div class="project-list" id="project-list">
+                        <div class="project-list-empty">No saved projects yet</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="header-center">
+            <span class="status-item" id="status-script">○ Script</span>
+            <span class="status-item" id="status-tts">○ TTS</span>
+            <span class="status-item" id="status-demo">○ Demo</span>
+            <span class="status-item" id="status-data">○ Data</span>
+        </div>
+        <div class="header-right">
+            <button id="save-project-btn" class="btn btn-sm" title="Save Project (Ctrl+Shift+S)">💾 Save</button>
+            <button id="record-studio-btn" class="btn btn-primary">▶ Recording Studio</button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="workspace-main">
+        <!-- Left Panel - Input -->
+        <div class="panel input-panel">
+            <h3 class="panel-title">📝 PROJECT SETUP</h3>
+
+            <div class="form-group">
+                <label>Topic</label>
+                <input type="text" id="topic" placeholder="e.g., Identifying Code Bottlenecks" value="Identifying Code Bottlenecks">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Duration</label>
+                    <input type="text" id="duration" value="7 min">
+                </div>
+                <div class="form-group">
+                    <label>Audience</label>
+                    <select id="audience">
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate" selected>Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Bullet Points</label>
+                <textarea id="bullets" rows="12">### HOOK
+- "Your code runs... but takes 45 seconds"
+- Most developers guess wrong about what's slow
+
+### OBJECTIVE
+- Identify bottlenecks using profiling tools
+- Apply targeted fixes to actual slow code
+
+### CONTENT
+- What is a bottleneck? The 90/10 rule
+- Tools: cProfile, line_profiler
+- Demo: Profile O(n²) code, fix to O(n)
+
+### SUMMARY
+- Profile before optimizing
+- Small changes → big speedups
+
+### CTA
+- Next: Hands-on profiling lab</textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Demo Requirements</label>
+                <textarea id="demo-req" rows="5">Show:
+- Slow Python with O(n²) nested loop
+- cProfile output showing bottleneck
+- Optimized O(n) version
+- Timing: 45 sec → 0.3 sec</textarea>
+            </div>
+
+            <!-- Environment Selection -->
+            <div class="form-group">
+                <label>Environment</label>
+                <div class="env-grid">
+                    <button class="env-btn active" data-env="jupyter">
+                        <span class="icon">📓</span>
+                        <span class="name">Jupyter</span>
+                    </button>
+                    <button class="env-btn" data-env="terminal">
+                        <span class="icon">💻</span>
+                        <span class="name">Terminal</span>
+                    </button>
+                    <button class="env-btn" data-env="vscode">
+                        <span class="icon">📝</span>
+                        <span class="name">VS Code</span>
+                    </button>
+                    <button class="env-btn" data-env="ipython">
+                        <span class="icon">🐍</span>
+                        <span class="name">IPython</span>
+                    </button>
+                    <button class="env-btn" data-env="pycharm">
+                        <span class="icon">🔧</span>
+                        <span class="name">PyCharm</span>
+                    </button>
+                </div>
+                <button id="recommend-env-btn" class="btn btn-text">🤖 Get AI Recommendation</button>
+            </div>
+
+            <!-- Datasets -->
+            <div class="form-group">
+                <div class="datasets-header">
+                    <label>Datasets</label>
+                    <button class="btn btn-text">+ Add</button>
+                </div>
+                <div id="datasets-list" class="datasets-list">
+                    <p class="empty-state">Generate to analyze data needs</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Panel - Preview/Edit -->
+        <div class="panel preview-panel">
+            <div class="panel-header-row">
+                <h3 class="panel-title">👁 PREVIEW & EDIT</h3>
+                <div class="edit-mode-toggle">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="edit-mode-toggle">
+                        <span class="toggle-text">Edit Mode</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="script">📝 Script</button>
+                <button class="tab" data-tab="tts">🎙️ TTS</button>
+                <button class="tab" data-tab="demo">💻 Demo</button>
+                <button class="tab" data-tab="data">📊 Data</button>
+                <button class="tab" data-tab="report">📋 Report</button>
+            </div>
+
+            <!-- Propagation Warning -->
+            <div id="propagation-warning" class="propagation-warning hidden">
+                <span class="warning-icon">⚠️</span>
+                <span class="warning-message">Script changed - Related content may need updating</span>
+                <div class="warning-actions">
+                    <button class="btn btn-sm" onclick="propagateChanges('narration_tts.txt')">Regenerate TTS</button>
+                    <button class="btn btn-sm" onclick="checkAlignment()">Check Alignment</button>
+                    <button class="btn btn-sm btn-text" onclick="dismissWarning()">Dismiss</button>
+                </div>
+            </div>
+
+            <div class="tab-content">
+                <!-- Script Tab -->
+                <div id="tab-script" class="tab-pane active">
+                    <div class="editor-toolbar">
+                        <div class="section-tabs" id="script-section-tabs">
+                            <button class="section-tab active" data-section="all">All</button>
+                            <button class="section-tab" data-section="hook">HOOK</button>
+                            <button class="section-tab" data-section="objective">OBJECTIVE</button>
+                            <button class="section-tab" data-section="content">CONTENT</button>
+                            <button class="section-tab" data-section="summary">SUMMARY</button>
+                            <button class="section-tab" data-section="cta">CTA</button>
+                        </div>
+                        <div class="toolbar-actions">
+                            <span class="sync-status" id="script-sync-status">✓ Saved</span>
+                            <button class="btn btn-ai" onclick="openAIAssistant('script')" title="AI Assistant">✨ AI</button>
+                            <button class="btn btn-sm" onclick="saveArtifact('narration_script.md')" id="save-script-btn">Save</button>
+                        </div>
+                    </div>
+                    <div id="script-preview" class="preview-content">
+                        <div class="empty-preview">
+                            <span class="icon">🎬</span>
+                            <p>Click "Generate Package" to create content</p>
+                        </div>
+                    </div>
+                    <textarea id="script-editor" class="editor-textarea hidden" placeholder="Narration script will appear here..."></textarea>
+                </div>
+
+                <!-- TTS Tab -->
+                <div id="tab-tts" class="tab-pane">
+                    <div class="editor-toolbar">
+                        <div class="toolbar-info">
+                            <span class="tts-notice">TTS Optimized: Visual cues removed, acronyms expanded</span>
+                        </div>
+                        <div class="toolbar-actions">
+                            <span class="sync-status" id="tts-sync-status">✓ Saved</span>
+                            <button class="btn btn-ai" onclick="openAIAssistant('tts')" title="AI Assistant">✨ AI</button>
+                            <button class="btn btn-sm" onclick="saveArtifact('narration_tts.txt')" id="save-tts-btn">Save</button>
+                        </div>
+                    </div>
+                    <div id="tts-preview" class="preview-content"></div>
+                    <textarea id="tts-editor" class="editor-textarea hidden" placeholder="TTS script will appear here..."></textarea>
+                </div>
+
+                <!-- Demo Tab -->
+                <div id="tab-demo" class="tab-pane">
+                    <div class="editor-toolbar">
+                        <div class="toolbar-info">
+                            <span class="demo-badge" id="demo-type-badge">demo.py</span>
+                        </div>
+                        <div class="toolbar-actions">
+                            <span class="sync-status" id="demo-sync-status">✓ Saved</span>
+                            <button class="btn btn-ai" onclick="openAIAssistant('demo')" title="AI Assistant">✨ AI</button>
+                            <button class="btn btn-sm" onclick="saveCurrentDemo()" id="save-demo-btn">Save</button>
+                        </div>
+                    </div>
+                    <div id="demo-preview" class="preview-content"></div>
+                    <textarea id="demo-editor" class="editor-textarea hidden" placeholder="Demo code will appear here..."></textarea>
+                </div>
+
+                <!-- Data Tab -->
+                <div id="tab-data" class="tab-pane">
+                    <div id="data-preview" class="preview-content"></div>
+                </div>
+
+                <!-- Report Tab -->
+                <div id="tab-report" class="tab-pane">
+                    <div id="report-preview" class="preview-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - AI Chat & Actions -->
+        <div class="panel right-panel">
+            <h3 class="panel-title">⚡ ACTIONS</h3>
+
+            <div class="actions-grid">
+                <button id="generate-btn" class="btn btn-success btn-large">🎬 Generate Package</button>
+                <button id="align-btn" class="btn">✓ Alignment</button>
+                <button id="quality-btn" class="btn">📊 Quality</button>
+                <button id="export-btn" class="btn">📦 Export</button>
+                <button id="record-btn" class="btn btn-warning">▶ Record</button>
+            </div>
+
+            <h3 class="panel-title">🤖 AI ASSISTANT</h3>
+
+            <div id="chat-container" class="chat-container">
+                <div class="chat-message assistant">
+                    👋 Ready to help! Describe what you want to create or modify.
+                </div>
+            </div>
+
+            <div class="chat-input-row">
+                <input type="text" id="chat-input" placeholder="Modify script, data, demo...">
+                <button id="send-btn" class="btn btn-primary">Send</button>
+            </div>
+
+            <div class="quick-actions">
+                <button class="quick-btn" data-action="Make the hook more dramatic">hook</button>
+                <button class="quick-btn" data-action="Add data quality issues">data</button>
+                <button class="quick-btn" data-action="Switch to terminal demo">terminal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Generating package...</p>
+            <p class="loading-sub">Script → TTS → Demo → Data</p>
+        </div>
+    </div>
+
+    <!-- Floating AI Assistant Panel -->
+    <div id="ai-assistant-panel" class="ai-assistant-panel hidden">
+        <div class="ai-panel-header">
+            <span class="ai-panel-title">✨ AI Assistant</span>
+            <span class="ai-panel-context" id="ai-panel-context">- Script</span>
+            <div class="ai-panel-controls">
+                <button class="ai-panel-btn" onclick="minimizeAIPanel()" title="Minimize">−</button>
+                <button class="ai-panel-btn" onclick="closeAIPanel()" title="Close">✕</button>
+            </div>
+        </div>
+        <div class="ai-panel-body">
+            <div class="ai-quick-actions">
+                <button class="ai-action-btn" data-action="improve_hook">🎯 Improve Hook</button>
+                <button class="ai-action-btn" data-action="shorten">✂️ Shorten</button>
+                <button class="ai-action-btn" data-action="add_cues">📺 Add Cues</button>
+                <button class="ai-action-btn" data-action="add_pauses">⏸️ Add Pauses</button>
+                <button class="ai-action-btn" data-action="fix_grammar">✏️ Fix Grammar</button>
+                <button class="ai-action-btn" data-action="make_conversational">💬 Conversational</button>
+            </div>
+            <div class="ai-messages" id="ai-messages">
+                <div class="ai-message assistant">
+                    How can I help improve this content? Click a quick action or describe what you need.
+                </div>
+            </div>
+            <div class="ai-suggestion-box hidden" id="ai-suggestion-box">
+                <div class="suggestion-header">
+                    <span>💡 Suggestion</span>
+                    <button class="btn btn-sm btn-success" onclick="applySuggestion()">Apply</button>
+                </div>
+                <div class="suggestion-content" id="ai-suggestion-content"></div>
+            </div>
+            <div class="ai-input-row">
+                <input type="text" id="ai-custom-input" placeholder="Ask AI for help...">
+                <button class="btn btn-primary" onclick="sendAIRequest()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unsaved Changes Modal -->
+    <div id="unsaved-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">Unsaved Changes</span>
+            </div>
+            <div class="modal-body">
+                <p>You have unsaved changes in "<span id="unsaved-project-name">current project</span>".</p>
+                <p>Do you want to save before continuing?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="discardAndContinue()">Don't Save</button>
+                <button class="btn" onclick="closeUnsavedModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveAndContinue()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Project Modal -->
+    <div id="new-project-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">New Project</span>
+                <button class="modal-close" onclick="closeNewProjectModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Project Name</label>
+                    <input type="text" id="new-project-name" placeholder="My Screencast Project">
+                </div>
+                <div class="form-group">
+                    <label>Topic (optional)</label>
+                    <input type="text" id="new-project-topic" placeholder="e.g., Python Data Analysis">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeNewProjectModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="createNewProject()">Create Project</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save As Modal -->
+    <div id="save-as-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">Save Project As</span>
+                <button class="modal-close" onclick="closeSaveAsModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Project Name</label>
+                    <input type="text" id="save-as-name" placeholder="My Screencast Project">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeSaveAsModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="doSaveAs()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">Delete Project</span>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete "<span id="delete-project-name"></span>"?</p>
+                <p class="warning-text">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/workspace.js') }}"></script>
+{% endblock %}
