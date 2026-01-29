@@ -761,6 +761,12 @@ function setupKeyboardShortcuts() {
             newProject();
         }
 
+        // Ctrl+O to open project file
+        if (e.ctrlKey && e.key === 'o') {
+            e.preventDefault();
+            openProjectFile();
+        }
+
         // Escape to close modals and AI panel
         if (e.key === 'Escape') {
             closeAIPanel();
@@ -1389,6 +1395,90 @@ async function doSaveAs() {
     await saveProject();
 }
 
+// Export Project - with Windows Explorer save dialog
+async function exportProjectDialog() {
+    closeProjectMenu();
+    try {
+        const name = document.getElementById('project-name').textContent || 'my-project';
+        const dialogRes = await fetch('/api/save-dialog', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ default_name: name, type: 'project' })
+        });
+        const dialog = await dialogRes.json();
+
+        if (!dialog.success) {
+            if (dialog.cancelled) return;
+            throw new Error(dialog.message);
+        }
+
+        const exportRes = await fetch('/api/projects/export', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ filepath: dialog.filepath })
+        });
+        const result = await exportRes.json();
+
+        if (result.success) {
+            projectSaved = true;
+            updateSavedIndicator();
+            addChatMessage('system', `📦 Exported to ${result.filepath} (${result.size_kb} KB)`);
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        addChatMessage('assistant', `❌ Export failed: ${err.message}`);
+    }
+}
+
+// Open Project - with Windows Explorer open dialog
+async function openProjectFile() {
+    closeProjectMenu();
+
+    if (!projectSaved) {
+        pendingAction = { type: 'open-file' };
+        showUnsavedModal();
+        return;
+    }
+
+    await doOpenProjectFile();
+}
+
+async function doOpenProjectFile() {
+    try {
+        const dialogRes = await fetch('/api/open-dialog', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ type: 'project' })
+        });
+        const dialog = await dialogRes.json();
+
+        if (!dialog.success) {
+            if (dialog.cancelled) return;
+            throw new Error(dialog.message);
+        }
+
+        const importRes = await fetch('/api/projects/import-file', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ filepath: dialog.filepath })
+        });
+        const result = await importRes.json();
+
+        if (result.success) {
+            currentProjectId = result.project.id;
+            projectSaved = false;
+            updateSavedIndicator();
+            loadCurrentProject();
+            addChatMessage('system', `📂 Opened: ${result.project.name || 'Untitled'}`);
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        addChatMessage('assistant', `❌ Open failed: ${err.message}`);
+    }
+}
+
 // Switch Project
 async function switchProject(projectId) {
     closeProjectMenu();
@@ -1542,6 +1632,8 @@ function executePendingAction() {
         showNewProjectModal();
     } else if (action.type === 'switch') {
         loadProject(action.projectId, true);
+    } else if (action.type === 'open-file') {
+        doOpenProjectFile();
     }
 }
 

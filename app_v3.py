@@ -6,6 +6,7 @@ from flask_cors import CORS
 import os
 import json
 import uuid
+import threading
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -751,30 +752,34 @@ def find_ffmpeg():
 
 @app.route('/api/start-screen-record', methods=['POST'])
 def start_screen_record():
-    """Start screen recording using FFmpeg."""
+    """Start screen recording using FFmpeg - 1920x1080 MP4."""
     import subprocess
 
     data = request.json
-    x = int(data.get('x', 100))
-    y = int(data.get('y', 100))
-    width = int(data.get('width', 1280))
-    height = int(data.get('height', 720))
-    filename = data.get('filename', 'screencast.mov')
+
+    # Default to 1920x1080
+    width = int(data.get('width', 1920))
+    height = int(data.get('height', 1080))
+    x = int(data.get('x', 0))
+    y = int(data.get('y', 0))
     fps = int(data.get('fps', 30))
 
-    # Check for FFmpeg
+    # Force MP4 format
+    filename = data.get('filename', 'screencast.mp4')
+    if not filename.endswith('.mp4'):
+        filename = filename.rsplit('.', 1)[0] + '.mp4'
+
     ffmpeg_path = find_ffmpeg()
     if not ffmpeg_path:
         return jsonify({
             'success': False,
-            'message': 'FFmpeg not found. Install FFmpeg to enable screen recording.'
+            'message': 'FFmpeg not found. Install with: winget install ffmpeg'
         })
 
     output_path = Config.OUTPUT_DIR / filename
     Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        # FFmpeg command for Windows GDI capture
         cmd = [
             ffmpeg_path,
             '-f', 'gdigrab',
@@ -785,6 +790,8 @@ def start_screen_record():
             '-i', 'desktop',
             '-c:v', 'libx264',
             '-preset', 'ultrafast',
+            '-pix_fmt', 'yuv420p',
+            '-crf', '23',
             '-y',
             str(output_path)
         ]
@@ -793,40 +800,38 @@ def start_screen_record():
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
         screen_recorder["active"] = True
         screen_recorder["filename"] = str(output_path)
 
         return jsonify({
             'success': True,
-            'message': 'Recording started',
+            'message': f'Recording: {width}x{height} @ {fps}fps MP4',
             'filename': str(output_path)
         })
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': str(e)
-        })
+        return jsonify({'success': False, 'message': str(e)})
 
 
 @app.route('/api/stop-screen-record', methods=['POST'])
 def stop_screen_record():
     """Stop screen recording."""
+    import subprocess
+
     if not screen_recorder["active"] or not screen_recorder["process"]:
-        return jsonify({
-            'success': False,
-            'message': 'No recording in progress'
-        })
+        return jsonify({'success': False, 'message': 'No recording in progress'})
 
     try:
-        # Send 'q' to FFmpeg to stop gracefully
         screen_recorder["process"].stdin.write(b'q')
         screen_recorder["process"].stdin.flush()
-        screen_recorder["process"].wait(timeout=5)
+        screen_recorder["process"].wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        screen_recorder["process"].kill()
+        screen_recorder["process"].wait()
     except Exception:
-        # Force kill if graceful stop fails
         screen_recorder["process"].kill()
 
     filename = screen_recorder["filename"]
@@ -834,11 +839,14 @@ def stop_screen_record():
     screen_recorder["process"] = None
     screen_recorder["filename"] = None
 
-    return jsonify({
-        'success': True,
-        'message': 'Recording stopped',
-        'filename': filename
-    })
+    if filename and os.path.exists(filename):
+        size_mb = round(os.path.getsize(filename) / (1024 * 1024), 2)
+        return jsonify({
+            'success': True,
+            'message': f'Saved: {filename} ({size_mb} MB)',
+            'filename': filename
+        })
+    return jsonify({'success': False, 'message': 'File not created'})
 
 
 # ============================================================
@@ -1115,6 +1123,185 @@ def mark_project_modified():
     current_project['saved'] = False
     current_project['modified_at'] = datetime.now().isoformat()
     return jsonify({'success': True})
+
+
+# ============================================================
+# Native File Dialogs (Windows Explorer integration)
+# ============================================================
+
+def run_save_dialog(result_holder, default_name, file_types, default_ext):
+    """Run tkinter save dialog in separate thread."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        root.focus_force()
+
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=default_ext,
+            filetypes=file_types,
+            initialfile=default_name,
+            title="Save As"
+        )
+
+        root.destroy()
+        result_holder['path'] = filepath
+    except Exception as e:
+        result_holder['error'] = str(e)
+
+
+@app.route('/api/save-dialog', methods=['POST'])
+def show_save_dialog():
+    """Show native Windows save dialog."""
+    data = request.get_json(silent=True) or {}
+    default_name = data.get('default_name', 'project')
+    save_type = data.get('type', 'project')
+
+    if save_type == 'recording':
+        filetypes = [("MP4 Video", "*.mp4"), ("All Files", "*.*")]
+        ext = '.mp4'
+    else:
+        filetypes = [("ZIP Archive", "*.zip"), ("All Files", "*.*")]
+        ext = '.zip'
+
+    if not default_name.endswith(ext):
+        default_name += ext
+
+    result = {}
+    dialog_thread = threading.Thread(
+        target=run_save_dialog,
+        args=(result, default_name, filetypes, ext)
+    )
+    dialog_thread.start()
+    dialog_thread.join(timeout=60)
+
+    if 'error' in result:
+        return jsonify({'success': False, 'message': result['error']})
+
+    filepath = result.get('path', '')
+    if not filepath:
+        return jsonify({'success': False, 'cancelled': True})
+
+    return jsonify({
+        'success': True,
+        'filepath': filepath,
+        'filename': os.path.basename(filepath),
+        'directory': os.path.dirname(filepath)
+    })
+
+
+@app.route('/api/open-dialog', methods=['POST'])
+def show_open_dialog():
+    """Show native Windows open dialog."""
+    data = request.get_json(silent=True) or {}
+    file_type = data.get('type', 'project')
+
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        root.focus_force()
+
+        if file_type == 'project':
+            filetypes = [("ZIP Archive", "*.zip"), ("All Files", "*.*")]
+            title = "Open Project"
+        else:
+            filetypes = [("Video Files", "*.mp4;*.mov;*.avi"), ("All Files", "*.*")]
+            title = "Open Recording"
+
+        filepath = filedialog.askopenfilename(filetypes=filetypes, title=title)
+        root.destroy()
+
+        if not filepath:
+            return jsonify({'success': False, 'cancelled': True})
+
+        return jsonify({
+            'success': True,
+            'filepath': filepath,
+            'filename': os.path.basename(filepath)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/projects/export', methods=['POST'])
+def export_project():
+    """Export current project as ZIP to user-specified location."""
+    import zipfile
+
+    data = request.get_json(silent=True) or {}
+    export_path = data.get('filepath')
+
+    if not export_path:
+        return jsonify({'success': False, 'message': 'No path specified'}), 400
+
+    if not export_path.endswith('.zip'):
+        export_path += '.zip'
+
+    try:
+        with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            metadata = {k: v for k, v in current_project.items() if k != 'artifacts'}
+            metadata['artifact_files'] = list(current_project.get('artifacts', {}).keys())
+            zf.writestr('project.json', json.dumps(metadata, indent=2))
+
+            for fname, content in current_project.get('artifacts', {}).items():
+                zf.writestr(fname, content)
+
+        current_project['saved'] = True
+        size_kb = round(os.path.getsize(export_path) / 1024, 1)
+
+        return jsonify({
+            'success': True,
+            'message': f'Exported to {export_path}',
+            'filepath': export_path,
+            'size_kb': size_kb
+        })
+    except PermissionError:
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/projects/import-file', methods=['POST'])
+def import_project_from_file():
+    """Import project from ZIP file."""
+    import zipfile
+    global current_project
+
+    data = request.get_json(silent=True) or {}
+    import_path = data.get('filepath')
+
+    if not import_path or not os.path.exists(import_path):
+        return jsonify({'success': False, 'message': 'File not found'}), 404
+
+    try:
+        with zipfile.ZipFile(import_path, 'r') as zf:
+            project_data = json.loads(zf.read('project.json'))
+            project_data['artifacts'] = {}
+
+            for fname in project_data.get('artifact_files', []):
+                try:
+                    project_data['artifacts'][fname] = zf.read(fname).decode('utf-8')
+                except KeyError:
+                    pass
+
+            project_data['id'] = str(uuid.uuid4())[:8]
+            project_data['saved'] = False
+            current_project = project_data
+
+        return jsonify({
+            'success': True,
+            'project': current_project,
+            'message': f'Imported: {current_project.get("name")}'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 if __name__ == '__main__':
