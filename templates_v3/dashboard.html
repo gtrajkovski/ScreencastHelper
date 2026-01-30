@@ -200,6 +200,7 @@ async function loadDashboardProjects() {
                         <p>${formatDate(project.modified_at)} ${project.has_artifacts ? '• ✓ Generated' : '• 📝 Draft'}</p>
                         <div class="project-actions">
                             <button class="btn btn-secondary" onclick="openProject('${project.id}')">Edit</button>
+                            <a href="/player" class="btn btn-sm" style="background: var(--accent-secondary); color: white; padding: 8px; font-size: 13px;">▶ Player</a>
                             <button class="btn btn-danger btn-sm" onclick="deleteProjectFromDashboard('${project.id}', event)" style="padding: 8px; font-size: 13px;">🗑️</button>
                         </div>
                     </div>

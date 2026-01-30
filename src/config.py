@@ -99,6 +99,11 @@ class Config:
     DEFAULT_DURATION = 7
     WORDS_PER_MINUTE = 150
 
+    # TTS Audio Generation (v4.0)
+    TTS_VOICE = os.getenv("TTS_VOICE", "en-US-AriaNeural")
+    TTS_RATE = os.getenv("TTS_RATE", "+0%")
+    TTS_PITCH = os.getenv("TTS_PITCH", "+0Hz")
+
     # TTS Fixes
     TTS_FIXES = TTS_REPLACEMENTS = {
         "O(n^2)": "O of n squared",

@@ -17,6 +17,8 @@ load_dotenv()
 from src.ai.client import AIClient
 from src.ai.prompts import CHAT_ASSISTANT
 from src.config import Config, Environment
+from src.generators.tts_audio_generator import TTSAudioGenerator
+from src.generators.timeline_generator import TimelineGenerator
 
 app = Flask(__name__,
             template_folder='templates_v3',
@@ -80,6 +82,7 @@ def get_empty_project():
         "environment": "jupyter",
         "artifacts": {},
         "datasets": [],
+        "audio_segments": [],
         "created_at": None,
         "modified_at": None,
         "saved": True
@@ -132,6 +135,297 @@ def recording_controller():
 @app.route('/export')
 def export_page():
     return render_template('export.html')
+
+
+@app.route('/player')
+def player_page():
+    """Player page with simulated environment and synchronized playback."""
+    return render_template('player.html')
+
+
+# ============================================================================
+# TTS AUDIO GENERATION API (v4.0)
+# ============================================================================
+
+@app.route('/api/generate-audio', methods=['POST'])
+def generate_audio():
+    """Generate TTS audio for all parsed segments."""
+    # Need presentation segments parsed first
+    presentation = current_project.get('presentation')
+    if not presentation or not presentation.get('segments'):
+        return jsonify({'success': False, 'message': 'No segments parsed. Generate and parse script first.'}), 400
+
+    segments = presentation['segments']
+    data = request.json or {}
+    voice = data.get('voice', Config.TTS_VOICE)
+    rate = data.get('rate', Config.TTS_RATE)
+    pitch = data.get('pitch', Config.TTS_PITCH)
+
+    # Create audio output directory
+    project_name = current_project.get('topic', 'Untitled')
+    safe_name = sanitize_filename(project_name)
+    audio_dir = Config.OUTPUT_DIR / 'audio' / safe_name
+    audio_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        tts = TTSAudioGenerator(voice=voice, rate=rate, pitch=pitch)
+        result = tts.generate_sync(segments, str(audio_dir))
+
+        # Store audio metadata in project
+        current_project['audio_segments'] = [
+            {
+                'segment_id': a.segment_id,
+                'section': a.section,
+                'audio_path': a.audio_path,
+                'duration_seconds': a.duration_seconds,
+                'file_size_bytes': a.file_size_bytes
+            }
+            for a in result.segments
+        ]
+        current_project['audio_dir'] = str(audio_dir)
+
+        return jsonify({
+            'success': True,
+            'total_duration': result.total_duration_seconds,
+            'segments': len(result.segments),
+            'audio_dir': str(audio_dir),
+            'audio_segments': current_project['audio_segments']
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/audio/<int:seg_id>')
+def serve_audio(seg_id):
+    """Serve an audio segment MP3 file."""
+    audio_segments = current_project.get('audio_segments', [])
+    seg = next((a for a in audio_segments if a['segment_id'] == seg_id), None)
+    if not seg or not os.path.exists(seg['audio_path']):
+        return jsonify({'success': False, 'message': 'Audio not found'}), 404
+
+    return send_file(seg['audio_path'], mimetype='audio/mpeg')
+
+
+@app.route('/api/audio/status')
+def audio_status():
+    """Check which segments have audio generated."""
+    audio_segments = current_project.get('audio_segments', [])
+    return jsonify({
+        'success': True,
+        'has_audio': len(audio_segments) > 0,
+        'segments': audio_segments,
+        'total_duration': sum(a['duration_seconds'] for a in audio_segments)
+    })
+
+
+@app.route('/api/tts-voices')
+def list_tts_voices():
+    """List available Edge TTS voices."""
+    try:
+        voices = TTSAudioGenerator.list_voices_sync()
+        return jsonify({'success': True, 'voices': voices})
+    except Exception as e:
+        # Return a hardcoded fallback list
+        return jsonify({
+            'success': True,
+            'voices': [
+                {"id": "en-US-AriaNeural", "name": "Aria", "language": "en-US", "gender": "Female"},
+                {"id": "en-US-JennyNeural", "name": "Jenny", "language": "en-US", "gender": "Female"},
+                {"id": "en-US-GuyNeural", "name": "Guy", "language": "en-US", "gender": "Male"},
+                {"id": "en-GB-SoniaNeural", "name": "Sonia", "language": "en-GB", "gender": "Female"},
+                {"id": "en-GB-RyanNeural", "name": "Ryan", "language": "en-GB", "gender": "Male"},
+                {"id": "en-AU-NatashaNeural", "name": "Natasha", "language": "en-AU", "gender": "Female"},
+                {"id": "en-IN-NeerjaNeural", "name": "Neerja", "language": "en-IN", "gender": "Female"},
+            ]
+        })
+
+
+@app.route('/api/player-data')
+def get_player_data():
+    """Get all data needed for the Player page: segments, audio URLs, timelines."""
+    presentation = current_project.get('presentation')
+    if not presentation or not presentation.get('segments'):
+        return jsonify({'success': False, 'message': 'No segments parsed'}), 400
+
+    segments = presentation['segments']
+    audio_segments = current_project.get('audio_segments', [])
+
+    # Build audio lookup
+    audio_map = {a['segment_id']: a for a in audio_segments}
+
+    # Generate timelines
+    timeline_gen = TimelineGenerator()
+    player_segments = []
+
+    for seg in segments:
+        seg_id = seg.get('id', 0)
+        audio_info = audio_map.get(seg_id, {})
+        audio_duration = audio_info.get('duration_seconds', seg.get('duration_seconds', 30))
+
+        # Generate timeline
+        timeline = timeline_gen.generate(seg, audio_duration)
+
+        player_segments.append({
+            'id': seg_id,
+            'type': seg.get('type', 'slide'),
+            'section': seg.get('section', 'CONTENT'),
+            'title': seg.get('title', ''),
+            'narration': seg.get('narration', ''),
+            'environment': current_project.get('environment', 'jupyter'),
+            'audioUrl': f'/api/audio/{seg_id}' if seg_id in audio_map else None,
+            'duration': audio_duration,
+            'hasAudio': seg_id in audio_map,
+            'cells': seg.get('cells', []),
+            'slide_content': seg.get('slide_content', {}),
+            'visual_cues': seg.get('visual_cues', []),
+            'timeline': timeline.to_dict()
+        })
+
+    return jsonify({
+        'success': True,
+        'projectName': current_project.get('topic', 'Untitled'),
+        'environment': current_project.get('environment', 'jupyter'),
+        'totalDuration': sum(s['duration'] for s in player_segments),
+        'segments': player_segments
+    })
+
+
+# ============================================================================
+# AUTOMATED RECORDING API (v4.0)
+# ============================================================================
+
+auto_recorder = {
+    "active": False,
+    "segment_id": None,
+    "process": None,
+    "output_dir": None,
+    "segments_completed": 0,
+    "total_segments": 0
+}
+
+
+@app.route('/api/auto-record/start', methods=['POST'])
+def start_auto_record():
+    """Start automated recording of a segment (screen region + TTS audio)."""
+    if auto_recorder['active']:
+        return jsonify({'success': False, 'message': 'Recording already in progress'}), 400
+
+    data = request.json or {}
+    seg_id = data.get('segment_id', 0)
+    width = int(data.get('width', 1280))
+    height = int(data.get('height', 720))
+    offset_x = int(data.get('offset_x', 0))
+    offset_y = int(data.get('offset_y', 0))
+    fps = int(data.get('fps', 30))
+
+    # Get audio path for this segment
+    audio_segments = current_project.get('audio_segments', [])
+    audio_info = next((a for a in audio_segments if a['segment_id'] == seg_id), None)
+    audio_path = audio_info['audio_path'] if audio_info else None
+
+    # Create output directory
+    project_name = current_project.get('topic', 'Untitled')
+    safe_name = sanitize_filename(project_name)
+    rec_dir = Config.OUTPUT_DIR / 'recordings' / safe_name
+    rec_dir.mkdir(parents=True, exist_ok=True)
+    output_path = rec_dir / f'{seg_id:02d}.mp4'
+
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({'success': False, 'message': 'FFmpeg not found'}), 500
+
+    try:
+        import subprocess
+        cmd = [
+            ffmpeg, '-y',
+            '-f', 'gdigrab',
+            '-framerate', str(fps),
+            '-offset_x', str(offset_x),
+            '-offset_y', str(offset_y),
+            '-video_size', f'{width}x{height}',
+            '-i', 'desktop',
+        ]
+
+        # Mix in TTS audio if available
+        if audio_path and os.path.exists(audio_path):
+            cmd.extend(['-i', audio_path])
+
+        cmd.extend([
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-pix_fmt', 'yuv420p',
+            '-crf', '23',
+        ])
+
+        if audio_path and os.path.exists(audio_path):
+            cmd.extend(['-c:a', 'aac', '-b:a', '128k', '-shortest'])
+
+        cmd.append(str(output_path))
+
+        auto_recorder['process'] = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        auto_recorder['active'] = True
+        auto_recorder['segment_id'] = seg_id
+        auto_recorder['output_dir'] = str(rec_dir)
+
+        return jsonify({
+            'success': True,
+            'segment_id': seg_id,
+            'output_path': str(output_path)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/auto-record/stop', methods=['POST'])
+def stop_auto_record():
+    """Stop automated recording."""
+    if not auto_recorder['active']:
+        return jsonify({'success': False, 'message': 'No recording in progress'}), 400
+
+    seg_id = auto_recorder['segment_id']
+
+    try:
+        auto_recorder['process'].stdin.write(b'q')
+        auto_recorder['process'].stdin.flush()
+        auto_recorder['process'].wait(timeout=10)
+    except Exception:
+        if auto_recorder['process']:
+            auto_recorder['process'].kill()
+
+    output_path = Path(auto_recorder['output_dir']) / f'{seg_id:02d}.mp4'
+
+    auto_recorder['active'] = False
+    auto_recorder['process'] = None
+    auto_recorder['segment_id'] = None
+    auto_recorder['segments_completed'] += 1
+
+    if output_path.exists():
+        size_mb = round(output_path.stat().st_size / (1024 * 1024), 2)
+        return jsonify({
+            'success': True,
+            'segment_id': seg_id,
+            'filename': str(output_path),
+            'size_mb': size_mb
+        })
+
+    return jsonify({'success': False, 'message': 'Recording file not created'}), 500
+
+
+@app.route('/api/auto-record/status')
+def auto_record_status():
+    """Get automated recording progress."""
+    return jsonify({
+        'active': auto_recorder['active'],
+        'segment_id': auto_recorder['segment_id'],
+        'segments_completed': auto_recorder['segments_completed'],
+        'total_segments': auto_recorder['total_segments']
+    })
 
 
 @app.route('/api/generate', methods=['POST'])

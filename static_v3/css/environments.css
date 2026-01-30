@@ -1,0 +1,463 @@
+/* Simulated IDE Environments for ScreenCast Studio v4.0 */
+
+/* ============================================
+   Shared Environment Styles
+   ============================================ */
+
+.sim-environment {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    background: #1e1e2e;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Typing cursor */
+.typing-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1.2em;
+    background: var(--accent-primary, #10b981);
+    vertical-align: text-bottom;
+    animation: cursor-blink 1s step-end infinite;
+}
+
+@keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* Syntax highlighting tokens */
+.tok-keyword { color: #c678dd; }
+.tok-string { color: #98c379; }
+.tok-number { color: #d19a66; }
+.tok-comment { color: #5c6370; font-style: italic; }
+.tok-function { color: #61afef; }
+.tok-builtin { color: #e5c07b; }
+.tok-operator { color: #56b6c2; }
+.tok-decorator { color: #e06c75; }
+.tok-class { color: #e5c07b; }
+.tok-variable { color: #abb2bf; }
+
+/* ============================================
+   Jupyter Notebook Environment
+   ============================================ */
+
+.sim-jupyter {
+    background: #111827;
+}
+
+/* Jupyter toolbar */
+.sim-jupyter .jupyter-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: #1f2937;
+    border-bottom: 1px solid #374151;
+    flex-shrink: 0;
+}
+
+.sim-jupyter .jupyter-toolbar .toolbar-btn {
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid #374151;
+    border-radius: 3px;
+    color: #9ca3af;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.sim-jupyter .jupyter-toolbar .toolbar-btn:hover {
+    background: #374151;
+    color: #e5e7eb;
+}
+
+.sim-jupyter .jupyter-toolbar .toolbar-btn.run-btn {
+    color: #10b981;
+    border-color: #10b981;
+}
+
+.sim-jupyter .jupyter-toolbar .kernel-status {
+    margin-left: auto;
+    font-size: 11px;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sim-jupyter .jupyter-toolbar .kernel-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+}
+
+.sim-jupyter .jupyter-toolbar .kernel-dot.busy {
+    background: #f59e0b;
+    animation: kernel-pulse 1s ease-in-out infinite;
+}
+
+@keyframes kernel-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Jupyter cells container */
+.sim-jupyter .cells-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+/* Individual cell */
+.sim-jupyter .notebook-cell {
+    margin-bottom: 8px;
+    border: 1px solid #1f2937;
+    border-radius: 4px;
+    transition: border-color 0.2s;
+}
+
+.sim-jupyter .notebook-cell.focused {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+}
+
+/* Cell input area */
+.sim-jupyter .cell-input {
+    display: flex;
+    background: #1a1f2e;
+}
+
+.sim-jupyter .cell-label {
+    padding: 8px 8px 8px 12px;
+    color: #3b82f6;
+    font-size: 12px;
+    min-width: 70px;
+    text-align: right;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.sim-jupyter .cell-label.executed {
+    color: #10b981;
+}
+
+.sim-jupyter .cell-code {
+    flex: 1;
+    padding: 8px 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    min-height: 24px;
+    color: #e5e7eb;
+    overflow-x: auto;
+}
+
+/* Cell output area */
+.sim-jupyter .cell-output {
+    padding: 8px 12px 8px 90px;
+    background: #111827;
+    border-top: 1px solid #1f2937;
+    color: #d1d5db;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 13px;
+    display: none;
+}
+
+.sim-jupyter .cell-output.visible {
+    display: block;
+}
+
+.sim-jupyter .cell-output .output-error {
+    color: #ef4444;
+}
+
+.sim-jupyter .cell-output .output-table {
+    border-collapse: collapse;
+    font-size: 12px;
+    margin: 4px 0;
+}
+
+.sim-jupyter .cell-output .output-table th,
+.sim-jupyter .cell-output .output-table td {
+    padding: 4px 12px;
+    border: 1px solid #374151;
+    text-align: left;
+}
+
+.sim-jupyter .cell-output .output-table th {
+    background: #1f2937;
+    color: #9ca3af;
+}
+
+/* ============================================
+   VS Code Environment
+   ============================================ */
+
+.sim-vscode {
+    background: #1e1e1e;
+    display: flex;
+    flex-direction: row;
+}
+
+/* Activity bar (left icon strip) */
+.sim-vscode .activity-bar {
+    width: 48px;
+    background: #333333;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 8px;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.sim-vscode .activity-bar .activity-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: #858585;
+    font-size: 18px;
+    cursor: pointer;
+    transition: color 0.15s;
+    border-left: 2px solid transparent;
+}
+
+.sim-vscode .activity-bar .activity-icon:hover {
+    color: #cccccc;
+}
+
+.sim-vscode .activity-bar .activity-icon.active {
+    color: #ffffff;
+    border-left-color: var(--accent-primary, #10b981);
+}
+
+/* Main content area */
+.sim-vscode .vscode-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Tab bar */
+.sim-vscode .tab-bar {
+    display: flex;
+    background: #252526;
+    border-bottom: 1px solid #1e1e1e;
+    flex-shrink: 0;
+    overflow-x: auto;
+}
+
+.sim-vscode .tab-bar .tab {
+    padding: 8px 16px;
+    font-size: 13px;
+    color: #969696;
+    background: #2d2d2d;
+    border-right: 1px solid #252526;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s;
+}
+
+.sim-vscode .tab-bar .tab:hover {
+    background: #2a2d2e;
+}
+
+.sim-vscode .tab-bar .tab.active {
+    background: #1e1e1e;
+    color: #ffffff;
+    border-bottom: 1px solid #1e1e1e;
+}
+
+.sim-vscode .tab-bar .tab .tab-icon {
+    font-size: 12px;
+}
+
+/* Editor area */
+.sim-vscode .editor-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+.sim-vscode .line-numbers {
+    padding: 8px 8px 8px 16px;
+    text-align: right;
+    color: #858585;
+    font-size: 13px;
+    line-height: 1.5;
+    user-select: none;
+    background: #1e1e1e;
+    flex-shrink: 0;
+    min-width: 50px;
+}
+
+.sim-vscode .editor-content {
+    flex: 1;
+    padding: 8px 16px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #d4d4d4;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow: auto;
+}
+
+/* VS Code integrated terminal */
+.sim-vscode .vscode-terminal {
+    border-top: 1px solid #414141;
+    background: #1e1e1e;
+    flex-shrink: 0;
+    max-height: 200px;
+}
+
+.sim-vscode .vscode-terminal .terminal-header {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    background: #252526;
+    font-size: 11px;
+    color: #cccccc;
+    text-transform: uppercase;
+    gap: 12px;
+}
+
+.sim-vscode .vscode-terminal .terminal-header .terminal-tab {
+    padding: 2px 8px;
+    border-bottom: 1px solid var(--accent-primary, #10b981);
+}
+
+.sim-vscode .vscode-terminal .terminal-body {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #cccccc;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    max-height: 160px;
+}
+
+/* ============================================
+   Terminal Environment
+   ============================================ */
+
+.sim-terminal {
+    background: #0c0c0c;
+    flex-direction: column;
+}
+
+/* Terminal title bar */
+.sim-terminal .terminal-titlebar {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: #2d2d2d;
+    flex-shrink: 0;
+}
+
+.sim-terminal .terminal-titlebar .window-dots {
+    display: flex;
+    gap: 6px;
+    margin-right: 12px;
+}
+
+.sim-terminal .terminal-titlebar .window-dots .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.sim-terminal .terminal-titlebar .window-dots .dot-red { background: #ff5f57; }
+.sim-terminal .terminal-titlebar .window-dots .dot-yellow { background: #febc2e; }
+.sim-terminal .terminal-titlebar .window-dots .dot-green { background: #28c840; }
+
+.sim-terminal .terminal-titlebar .title-text {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+/* Terminal body */
+.sim-terminal .terminal-body {
+    flex: 1;
+    padding: 12px 16px;
+    overflow-y: auto;
+    color: #d4d4d4;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* Terminal command line */
+.sim-terminal .terminal-line {
+    margin-bottom: 4px;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.sim-terminal .terminal-prompt {
+    color: #10b981;
+    margin-right: 8px;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.sim-terminal .terminal-command {
+    color: #e5e7eb;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.sim-terminal .terminal-output {
+    color: #9ca3af;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin-bottom: 8px;
+    padding-left: 0;
+}
+
+/* Block cursor for terminal */
+.sim-terminal .block-cursor {
+    display: inline-block;
+    width: 8px;
+    height: 1.2em;
+    background: #10b981;
+    vertical-align: text-bottom;
+    animation: cursor-blink 1s step-end infinite;
+}
+
+/* ============================================
+   Scrollbar Styling (shared)
+   ============================================ */
+
+.sim-environment ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.sim-environment ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sim-environment ::-webkit-scrollbar-thumb {
+    background: #4a4a5a;
+    border-radius: 4px;
+}
+
+.sim-environment ::-webkit-scrollbar-thumb:hover {
+    background: #5a5a6a;
+}

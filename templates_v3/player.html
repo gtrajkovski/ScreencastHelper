@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Player - ScreenCast Studio{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/environments.css') }}">
+<style>
+    .player-layout {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    /* Left: Simulated environment */
+    .player-environment {
+        flex: 7;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .player-environment .env-container {
+        flex: 1;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+    }
+
+    /* Right: Control panel */
+    .player-controls {
+        flex: 3;
+        background: var(--bg-secondary);
+        border-left: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    /* Header */
+    .player-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+
+    .player-header h2 {
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .player-header .back-link {
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 13px;
+    }
+
+    .player-header .back-link:hover {
+        color: var(--text-primary);
+    }
+
+    /* Segment badges */
+    .segment-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .seg-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 500;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+    }
+
+    .seg-badge:hover {
+        background: var(--border-color);
+    }
+
+    .seg-badge.active {
+        background: var(--accent-primary);
+        color: white;
+        border-color: var(--accent-primary);
+    }
+
+    .seg-badge.completed {
+        background: rgba(16, 185, 129, 0.15);
+        color: var(--accent-primary);
+    }
+
+    /* Teleprompter */
+    .teleprompter {
+        flex: 1;
+        padding: 16px;
+        overflow-y: auto;
+        font-size: 15px;
+        line-height: 1.8;
+        color: var(--text-secondary);
+    }
+
+    .teleprompter .narration-text {
+        transition: color 0.3s;
+    }
+
+    .teleprompter .narration-text.active {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .teleprompter .section-label {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: var(--bg-tertiary);
+        color: var(--accent-secondary);
+        margin-bottom: 8px;
+    }
+
+    /* Progress bar */
+    .progress-section {
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .progress-bar-container {
+        height: 4px;
+        background: var(--bg-tertiary);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 8px;
+        cursor: pointer;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background: var(--gradient-primary);
+        border-radius: 2px;
+        width: 0%;
+        transition: width 0.1s linear;
+    }
+
+    .progress-time {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Transport controls */
+    .transport-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .transport-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+    }
+
+    .transport-btn:hover {
+        background: var(--border-color);
+    }
+
+    .transport-btn.play-btn {
+        width: 48px;
+        height: 48px;
+        background: var(--accent-primary);
+        color: white;
+        font-size: 20px;
+    }
+
+    .transport-btn.play-btn:hover {
+        background: #0ea572;
+    }
+
+    .transport-btn.record-btn {
+        background: var(--accent-danger);
+        color: white;
+    }
+
+    .transport-btn.record-btn:hover {
+        background: #dc2626;
+    }
+
+    .transport-btn.record-btn.recording {
+        animation: record-pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes record-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+        50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    }
+
+    /* Keyboard shortcuts hint */
+    .shortcuts-hint {
+        padding: 8px 16px;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-align: center;
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .shortcuts-hint kbd {
+        padding: 1px 5px;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        font-family: inherit;
+        font-size: 10px;
+        background: var(--bg-tertiary);
+    }
+
+    /* Status bar */
+    .status-bar {
+        padding: 6px 16px;
+        font-size: 11px;
+        color: var(--text-muted);
+        background: var(--bg-primary);
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="player-layout">
+    <!-- Left: Simulated Environment -->
+    <div class="player-environment">
+        <div class="env-container" id="env-container"></div>
+    </div>
+
+    <!-- Right: Controls -->
+    <div class="player-controls">
+        <div class="player-header">
+            <h2>Player</h2>
+            <a href="/workspace" class="back-link">Back to Workspace</a>
+        </div>
+
+        <div class="segment-nav" id="segment-nav"></div>
+
+        <div class="teleprompter" id="teleprompter">
+            <p style="color: var(--text-muted); text-align: center; margin-top: 40px;">
+                Generate a script and audio first, then open the player.
+            </p>
+        </div>
+
+        <div class="progress-section">
+            <div class="progress-bar-container" id="progress-bar">
+                <div class="progress-bar-fill" id="progress-fill"></div>
+            </div>
+            <div class="progress-time">
+                <span id="time-current">0:00</span>
+                <span id="time-total">0:00</span>
+            </div>
+        </div>
+
+        <div class="transport-controls">
+            <button class="transport-btn" id="btn-prev" title="Previous segment">&#9664;&#9664;</button>
+            <button class="transport-btn play-btn" id="btn-play" title="Play/Pause">&#9654;</button>
+            <button class="transport-btn" id="btn-next" title="Next segment">&#9654;&#9654;</button>
+            <button class="transport-btn record-btn" id="btn-record" title="Record">&#9679;</button>
+            <button class="transport-btn" id="btn-stop" title="Stop">&#9632;</button>
+        </div>
+
+        <div class="shortcuts-hint">
+            <kbd>Space</kbd> Play/Pause &nbsp;
+            <kbd>&larr;</kbd><kbd>&rarr;</kbd> Prev/Next &nbsp;
+            <kbd>R</kbd> Record &nbsp;
+            <kbd>S</kbd> Stop
+        </div>
+
+        <div class="status-bar">
+            <span id="status-text">Ready</span>
+            <span id="status-segment">-</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/sim-environments.js') }}"></script>
+<script src="{{ url_for('static', filename='js/typewriter.js') }}"></script>
+<script src="{{ url_for('static', filename='js/playback-engine.js') }}"></script>
+<script src="{{ url_for('static', filename='js/player.js') }}"></script>
+{% endblock %}
