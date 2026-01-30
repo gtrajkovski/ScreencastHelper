@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Recording Controller - ScreenCast Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #1a1a2e;
+            color: #e2e8f0;
+            padding: 16px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .segment-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e94560;
+            margin-bottom: 8px;
+        }
+
+        .timer {
+            font-family: 'Fira Code', monospace;
+            font-size: 48px;
+            font-weight: 700;
+            text-align: center;
+            margin: 12px 0;
+            color: #f8fafc;
+        }
+        .timer.recording { color: #ef4444; animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
+
+        .target-duration {
+            font-size: 12px;
+            color: #94a3b8;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+
+        .badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 12px;
+        }
+        .badge {
+            padding: 4px 10px;
+            background: #0f3460;
+            border: 2px solid #334155;
+            border-radius: 12px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #94a3b8;
+        }
+        .badge:hover { border-color: #60a5fa; }
+        .badge.active { border-color: #e94560; color: #f8fafc; }
+        .badge.recorded { background: #155724; color: #d4edda; }
+
+        .teleprompter {
+            background: #0f0f23;
+            padding: 14px;
+            border-radius: 8px;
+            flex: 1;
+            overflow-y: auto;
+            font-size: 15px;
+            line-height: 1.7;
+            margin-bottom: 12px;
+            min-height: 0;
+        }
+
+        .teleprompter::-webkit-scrollbar { width: 5px; }
+        .teleprompter::-webkit-scrollbar-track { background: transparent; }
+        .teleprompter::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        .teleprompter .pause-marker {
+            display: inline-block;
+            padding: 1px 6px;
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 3px;
+            color: #fbbf24;
+            font-size: 11px;
+            font-weight: 500;
+            margin: 0 3px;
+            vertical-align: middle;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .nav-row {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-nav { background: #0f3460; color: #e2e8f0; flex: 1; }
+        .btn-nav:hover:not(:disabled) { background: #1e40af; }
+        .btn-record { background: #dc3545; color: white; }
+        .btn-record:hover:not(:disabled) { background: #b91c1c; }
+        .btn-record.recording { animation: pulse 1s infinite; }
+        .btn-stop { background: #6c757d; color: white; }
+        .btn-stop:hover:not(:disabled) { background: #4b5563; }
+
+        .progress {
+            text-align: center;
+            margin-top: 8px;
+            color: #64748b;
+            font-size: 12px;
+        }
+        .progress.done { color: #22c55e; }
+
+        .keyboard-hint {
+            text-align: center;
+            margin-top: 6px;
+            font-size: 10px;
+            color: #475569;
+        }
+        .keyboard-hint kbd {
+            padding: 1px 4px;
+            background: #334155;
+            border: 1px solid #475569;
+            border-radius: 2px;
+            font-family: 'Fira Code', monospace;
+            font-size: 9px;
+        }
+    </style>
+</head>
+<body>
+    <div class="segment-label" id="segLabel">Loading...</div>
+    <div class="badges" id="badges"></div>
+    <div class="timer" id="timer">00:00</div>
+    <div class="target-duration" id="targetDuration"></div>
+    <div class="teleprompter" id="teleprompter">Loading script...</div>
+
+    <div class="controls">
+        <div class="nav-row">
+            <button class="btn btn-nav" id="btnPrev" onclick="nav(-1)">Prev</button>
+            <button class="btn btn-nav" id="btnNext" onclick="nav(1)">Next</button>
+        </div>
+        <button class="btn btn-record" id="btnRec" onclick="startRec()">START RECORDING</button>
+        <button class="btn btn-stop" id="btnStop" onclick="stopRec()" disabled>STOP</button>
+    </div>
+
+    <div class="progress" id="progress">0 / 0 recorded</div>
+    <div class="keyboard-hint">
+        <kbd>R</kbd> Record &nbsp; <kbd>S</kbd> Stop &nbsp;
+        <kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate
+    </div>
+
+<script>
+let segments = [];
+let idx = 0;
+let recording = false;
+let timerInterval = null;
+let secs = 0;
+let scrollInterval = null;
+
+async function init() {
+    // Segments should already be parsed from workspace; fetch them
+    let resp = await fetch('/api/segments');
+    let data = await resp.json();
+
+    if (!data.success) {
+        // Try parsing first
+        await fetch('/api/parse-segments', { method: 'POST' });
+        resp = await fetch('/api/segments');
+        data = await resp.json();
+    }
+
+    if (data.success && data.segments.length) {
+        segments = data.segments;
+        renderBadges();
+        show(0);
+        updateProgress();
+    } else {
+        document.getElementById('teleprompter').textContent = 'No segments found. Generate a script first.';
+    }
+}
+
+function renderBadges() {
+    document.getElementById('badges').innerHTML = segments.map((s, i) =>
+        `<span class="badge ${s.status === 'recorded' ? 'recorded' : ''} ${i === idx ? 'active' : ''}"
+              onclick="show(${i})">${s.status === 'recorded' ? '\u2713' : '\u25CB'} ${s.title || s.section}</span>`
+    ).join('');
+}
+
+function show(i) {
+    if (recording) return;
+    if (i < 0 || i >= segments.length) return;
+
+    idx = i;
+    const s = segments[i];
+    document.getElementById('segLabel').textContent =
+        `${i + 1}/${segments.length}: ${s.title || s.section}`;
+
+    // Render narration with PAUSE markers (sanitize to prevent XSS)
+    let narration = s.narration || '';
+    narration = narration.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    narration = narration.replace(/\[PAUSE\]/gi, '<span class="pause-marker">PAUSE</span>');
+    narration = narration.replace(/\n/g, '<br>');
+    document.getElementById('teleprompter').innerHTML = narration;
+    document.getElementById('teleprompter').scrollTop = 0;
+
+    // Timer/target
+    if (!recording) {
+        const mins = Math.floor(s.duration_seconds / 60);
+        const sec = s.duration_seconds % 60;
+        document.getElementById('timer').textContent =
+            s.status === 'recorded' ? '\u2713 Done' : '00:00';
+        document.getElementById('targetDuration').textContent =
+            `Target: ${mins}:${sec.toString().padStart(2, '0')}`;
+    }
+
+    document.getElementById('btnPrev').disabled = i === 0;
+    document.getElementById('btnNext').disabled = i === segments.length - 1;
+    renderBadges();
+}
+
+function nav(dir) { show(idx + dir); }
+
+async function startRec() {
+    const s = segments[idx];
+    if (s.status === 'recorded' && !confirm('Replace existing recording?')) return;
+
+    const res = await fetch(`/api/segments/${idx}/record`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+        alert('Recording failed: ' + data.message);
+        return;
+    }
+
+    recording = true;
+    secs = 0;
+    segments[idx].status = 'recording';
+    document.getElementById('btnRec').disabled = true;
+    document.getElementById('btnRec').classList.add('recording');
+    document.getElementById('btnStop').disabled = false;
+    document.getElementById('timer').classList.add('recording');
+    renderBadges();
+
+    timerInterval = setInterval(() => {
+        secs++;
+        const m = Math.floor(secs / 60);
+        const sec = secs % 60;
+        document.getElementById('timer').textContent =
+            `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+    }, 1000);
+
+    autoScroll(s.duration_seconds);
+}
+
+async function stopRec() {
+    clearInterval(timerInterval);
+    stopAutoScroll();
+
+    const res = await fetch(`/api/segments/${idx}/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+
+    recording = false;
+    document.getElementById('btnRec').disabled = false;
+    document.getElementById('btnRec').classList.remove('recording');
+    document.getElementById('btnStop').disabled = true;
+    document.getElementById('timer').classList.remove('recording');
+
+    if (data.success) {
+        segments[idx].status = 'recorded';
+        document.getElementById('timer').textContent = '\u2713 Done';
+        renderBadges();
+        updateProgress();
+
+        // Auto-advance to next unrecorded
+        const nextIdx = segments.findIndex((seg, i) => i > idx && seg.status !== 'recorded');
+        if (nextIdx !== -1) {
+            setTimeout(() => show(nextIdx), 1000);
+        } else if (segments.every(seg => seg.status === 'recorded')) {
+            document.getElementById('progress').classList.add('done');
+        }
+    } else {
+        segments[idx].status = 'pending';
+        alert('Stop failed: ' + data.message);
+        renderBadges();
+    }
+}
+
+function autoScroll(durationSec) {
+    const el = document.getElementById('teleprompter');
+    const totalHeight = el.scrollHeight - el.clientHeight;
+    if (totalHeight <= 0) return;
+
+    const intervalMs = 50;
+    const scrollPerTick = totalHeight / (durationSec * 1000 / intervalMs);
+
+    scrollInterval = setInterval(() => {
+        if (!recording) { stopAutoScroll(); return; }
+        el.scrollTop += scrollPerTick;
+        if (el.scrollTop >= totalHeight) stopAutoScroll();
+    }, intervalMs);
+}
+
+function stopAutoScroll() {
+    if (scrollInterval) {
+        clearInterval(scrollInterval);
+        scrollInterval = null;
+    }
+}
+
+function updateProgress() {
+    const done = segments.filter(s => s.status === 'recorded').length;
+    const el = document.getElementById('progress');
+    el.textContent = `${done} / ${segments.length} recorded`;
+    if (done === segments.length && segments.length > 0) el.classList.add('done');
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+    switch (e.key.toLowerCase()) {
+        case 'r':
+            if (!recording) startRec();
+            break;
+        case 's':
+            if (recording) stopRec();
+            break;
+        case 'arrowleft':
+            nav(-1);
+            break;
+        case 'arrowright':
+            nav(1);
+            break;
+    }
+});
+
+// Cleanup on close
+window.addEventListener('beforeunload', e => {
+    if (timerInterval) clearInterval(timerInterval);
+    stopAutoScroll();
+    if (recording) {
+        navigator.sendBeacon(`/api/segments/${idx}/stop`, '{}');
+    }
+});
+
+init();
+</script>
+</body>
+</html>

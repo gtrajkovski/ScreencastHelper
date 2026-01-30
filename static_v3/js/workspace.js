@@ -148,6 +148,29 @@ async function openSegmentRecorder() {
     }
 }
 
+async function openRecordingController() {
+    addChatMessage('system', 'Parsing segments for recording controller...');
+    try {
+        const response = await fetch('/api/parse-segments', {method: 'POST'});
+        const data = await response.json();
+        if (!data.success) {
+            addChatMessage('assistant', 'Cannot open controller: ' + data.message);
+            return;
+        }
+        addChatMessage('system', `${data.total_segments} segments ready. Opening popup controller...`);
+        const popup = window.open(
+            '/recording-controller',
+            'RecordingController',
+            'width=420,height=650,top=100,left=100,resizable=yes'
+        );
+        if (!popup) {
+            addChatMessage('assistant', 'Popup blocked. Please allow popups for this site.');
+        }
+    } catch (error) {
+        addChatMessage('assistant', 'Error: ' + error.message);
+    }
+}
+
 // Quick action buttons
 function setupQuickActions() {
     document.querySelectorAll('.quick-btn').forEach(btn => {

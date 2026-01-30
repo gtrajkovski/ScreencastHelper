@@ -123,6 +123,12 @@ def segment_recorder_page():
     return render_template('segment_recorder.html')
 
 
+@app.route('/recording-controller')
+def recording_controller():
+    """Popup recording controller window."""
+    return render_template('recording_controller.html')
+
+
 @app.route('/export')
 def export_page():
     return render_template('export.html')
