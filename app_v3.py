@@ -38,6 +38,35 @@ def sanitize_filename(name, max_length=50):
     return safe[:max_length] if safe else 'Untitled'
 
 
+def split_long_content(content, max_words=350):
+    """Split long content at paragraph breaks for manageable recording segments."""
+    paragraphs = content.split('\n\n')
+    parts = []
+    current = []
+    words = 0
+
+    for para in paragraphs:
+        para_words = len(para.split())
+        if words + para_words > max_words and current:
+            parts.append('\n\n'.join(current))
+            current = [para]
+            words = para_words
+        else:
+            current.append(para)
+            words += para_words
+
+    if current:
+        parts.append('\n\n'.join(current))
+
+    return parts if parts else [content]
+
+
+def estimate_duration(text, wpm=150):
+    """Estimate speaking duration in seconds at given words-per-minute rate."""
+    words = len(text.split())
+    return max(15, int((words / wpm) * 60))
+
+
 def get_empty_project():
     """Return a clean project structure."""
     return {
@@ -960,6 +989,34 @@ def preview_segment(seg_id):
         return jsonify({'success': False, 'message': 'Invalid file path'}), 400
 
     return send_file(str(file_path), mimetype='video/mp4')
+
+
+@app.route('/api/segments/<int:seg_id>', methods=['GET'])
+def get_segment(seg_id):
+    """Get a single segment by ID."""
+    segments = segment_recorder.get('segments', [])
+    if seg_id < 0 or seg_id >= len(segments):
+        return jsonify({'success': False, 'message': 'Segment not found'}), 404
+    return jsonify({'success': True, 'segment': segments[seg_id]})
+
+
+@app.route('/api/segments/<int:seg_id>/delete', methods=['DELETE'])
+def delete_segment_recording(seg_id):
+    """Delete a segment's recording to allow re-recording."""
+    segments = segment_recorder.get('segments', [])
+    if seg_id < 0 or seg_id >= len(segments):
+        return jsonify({'success': False, 'message': 'Segment not found'}), 404
+
+    seg = segments[seg_id]
+    if seg.get('file_path') and os.path.exists(seg['file_path']):
+        os.remove(seg['file_path'])
+
+    seg['status'] = 'pending'
+    seg['file_path'] = None
+    seg['file_size'] = None
+    seg['recorded_at'] = None
+
+    return jsonify({'success': True, 'message': f'Recording deleted for segment {seg_id}'})
 
 
 @app.route('/api/segments/export', methods=['POST'])
