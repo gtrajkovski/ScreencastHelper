@@ -103,15 +103,50 @@ The `TTSOptimizer` transforms scripts for speech engines:
 
 Flask app in `app_v3.py` with templates in `templates_v3/` and static assets in `static_v3/`.
 
-Key endpoints:
+**Pages:**
+- `/` - Dashboard: project list, create/load projects
+- `/workspace` - Main workspace: project setup, script generation, AI chat, inline editing, markdown preview
+- `/recording` - 3-panel recording: teleprompter + demo notebook + section nav
+- `/recording-studio` - Enhanced teleprompter with customizable text, auto-scroll
+- `/present` - Presentation mode: slides, notebook cells, IVQ views with keyboard navigation
+- `/segment-recorder` - Per-segment recording: record each WWHAA section as separate MP4
+- `/export` - Export page
+
+**Core API endpoints:**
 - `/api/generate` - Generate full screencast package (script + TTS + demo)
 - `/api/chat` - AI chat with project context
 - `/api/check-alignment` - Verify component sync
 - `/api/check-quality` - Run quality checks
+- `/api/suggest` - AI suggestions for script improvement
 - `/api/recording-data` - Get data for recording studio
+
+**Project management:**
+- `/api/projects` - List/create projects (GET/POST)
+- `/api/projects/<id>` - Load project (GET)
+- `/api/projects/save` - Save current project (POST)
+- `/api/projects/current` - Get current in-memory project (GET)
+
+**Presentation system:**
+- `/api/parse-script` - Parse script into presentation segments (POST)
+- `/api/presentation/segments` - Get parsed segments (GET)
+
+**Segment recording:**
+- `/api/parse-segments` - Parse script into recording segments with filenames (POST)
+- `/api/segments` - Get segments with statuses (GET)
+- `/api/segments/<id>/record` - Start recording a segment (POST)
+- `/api/segments/<id>/stop` - Stop recording a segment (POST)
+- `/api/segments/<id>/preview` - Serve recorded MP4 (GET)
+- `/api/segments/export` - Export all segments as ZIP (POST)
+
+**Screen recording:**
 - `/api/start-screen-record`, `/api/stop-screen-record` - FFmpeg-based screen capture
 
-In-memory `current_project` dict stores project state between requests.
+In-memory `current_project` dict stores project state between requests. Projects persist to disk in `projects/` directory as JSON + artifact files.
+
+### Utility Functions (`app_v3.py`)
+- `sanitize_filename(name)` - Safe filename generation for output files
+- `find_ffmpeg()` - Locate FFmpeg executable (PATH, winget, common dirs)
+- `parse_script_to_segments(script, duration)` - Parse WWHAA script into typed segments (slide/notebook/ivq)
 
 ## Configuration
 
