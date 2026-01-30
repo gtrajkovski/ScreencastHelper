@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} - Workspace{% endblock %}
+
+{% block nav_items %}
+<a href="/dashboard" class="nav-link">Dashboard</a>
+<a href="/workspace/{{ project.id }}" class="nav-link active">Workspace</a>
+<a href="/player/{{ project.id }}" class="nav-link">Player</a>
+{% endblock %}
+
+{% block head %}
+<style>
+    .workspace-layout {
+        display: flex;
+        height: calc(100vh - 52px);
+    }
+
+    /* Left panel: Script editor */
+    .editor-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--border-color);
+        min-width: 0;
+    }
+
+    .editor-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .editor-toolbar .project-title {
+        font-weight: 600;
+        font-size: 15px;
+        flex: 1;
+    }
+
+    #script-editor {
+        flex: 1;
+        width: 100%;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        border: none;
+        padding: 16px 20px;
+        font-family: 'JetBrains Mono', 'Consolas', monospace;
+        font-size: 14px;
+        line-height: 1.6;
+        resize: none;
+        outline: none;
+    }
+
+    .editor-status {
+        padding: 6px 16px;
+        font-size: 12px;
+        color: var(--text-muted);
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+
+    /* Right panel: Actions */
+    .actions-panel {
+        width: 340px;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-secondary);
+        overflow-y: auto;
+        flex-shrink: 0;
+    }
+
+    .panel-section {
+        padding: 16px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .panel-section h3 {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Segment list */
+    .segment-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .segment-item {
+        padding: 8px 12px;
+        border-radius: var(--radius);
+        margin-bottom: 4px;
+        cursor: pointer;
+        transition: background 0.15s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .segment-item:hover { background: var(--bg-card); }
+
+    .segment-item .seg-type {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        flex-shrink: 0;
+    }
+
+    .segment-item .seg-type.screencast { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
+    .segment-item .seg-type.slide { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
+
+    .segment-item .seg-title {
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .segment-item .seg-duration {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="workspace-layout">
+    <!-- Script Editor -->
+    <div class="editor-panel">
+        <div class="editor-toolbar">
+            <span class="project-title">{{ project.name }}</span>
+            <button class="btn btn-sm" id="btn-save" onclick="saveScript()">Save</button>
+            <button class="btn btn-sm btn-primary" id="btn-generate" onclick="generateScript()">Generate Script</button>
+        </div>
+        <textarea id="script-editor" placeholder="Write or generate your WWHAA script here...&#10;&#10;## HOOK&#10;...&#10;## OBJECTIVE&#10;...&#10;## CONTENT&#10;...&#10;## SUMMARY&#10;...&#10;## CTA&#10;...">{{ project.script_raw or '' }}</textarea>
+        <div class="editor-status">
+            <span id="word-count">0 words</span>
+            <span id="save-status">Saved</span>
+        </div>
+    </div>
+
+    <!-- Actions Panel -->
+    <div class="actions-panel">
+        <!-- AI Generation -->
+        <div class="panel-section">
+            <h3>AI Generation</h3>
+            <div class="form-group">
+                <label>Topic</label>
+                <input type="text" id="gen-topic" value="{{ project.name }}" placeholder="Topic for script generation">
+            </div>
+            <div class="form-group">
+                <label>Duration (minutes)</label>
+                <input type="number" id="gen-duration" value="{{ project.config.duration_minutes or 5 }}" min="1" max="30">
+            </div>
+            <button class="btn btn-primary" style="width: 100%;" id="btn-ai-generate" onclick="generateScript()">
+                Generate Script with AI
+            </button>
+        </div>
+
+        <!-- Parse & Segments -->
+        <div class="panel-section">
+            <h3>Segments</h3>
+            <button class="btn btn-sm" style="width: 100%; margin-bottom: 12px;" onclick="parseScript()">Parse Script</button>
+            <div class="segment-list" id="segment-list">
+                <p style="color: var(--text-muted); font-size: 13px; text-align: center;">
+                    Parse the script to see segments
+                </p>
+            </div>
+        </div>
+
+        <!-- Audio -->
+        <div class="panel-section">
+            <h3>Audio</h3>
+            <div class="form-group">
+                <label>Voice</label>
+                <select id="voice-select">
+                    <option value="en-US-AriaNeural">Aria (US Female)</option>
+                    <option value="en-US-JennyNeural">Jenny (US Female)</option>
+                    <option value="en-US-GuyNeural">Guy (US Male)</option>
+                    <option value="en-GB-SoniaNeural">Sonia (UK Female)</option>
+                    <option value="en-GB-RyanNeural">Ryan (UK Male)</option>
+                </select>
+            </div>
+            <button class="btn btn-success" style="width: 100%;" id="btn-gen-audio" onclick="generateAudio()">
+                Generate All Audio
+            </button>
+            <div id="audio-status" style="margin-top: 8px; font-size: 12px; color: var(--text-muted);"></div>
+        </div>
+
+        <!-- Actions -->
+        <div class="panel-section">
+            <a href="/player/{{ project.id }}" class="btn btn-lg" style="width: 100%; background: var(--gradient-accent); color: white;">
+                Open Player
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PROJECT_ID = '{{ project.id }}';
+const editor = document.getElementById('script-editor');
+
+// Word count
+editor.addEventListener('input', () => {
+    const words = editor.value.trim().split(/\s+/).filter(w => w).length;
+    document.getElementById('word-count').textContent = `${words} words (~${Math.round(words / 150)} min)`;
+    document.getElementById('save-status').textContent = 'Unsaved';
+});
+
+// Initial word count
+editor.dispatchEvent(new Event('input'));
+
+// Load existing segments
+{% if project.segments %}
+renderSegments({{ project.segments | tojson }});
+{% endif %}
+
+async function saveScript() {
+    try {
+        await api(`/api/projects/${PROJECT_ID}`, {
+            method: 'PUT',
+            body: JSON.stringify({ script_raw: editor.value })
+        });
+        document.getElementById('save-status').textContent = 'Saved';
+        showToast('Script saved');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function generateScript() {
+    const topic = document.getElementById('gen-topic').value.trim();
+    const duration = parseInt(document.getElementById('gen-duration').value) || 5;
+    if (!topic) { showToast('Enter a topic', 'error'); return; }
+
+    const btn = document.getElementById('btn-ai-generate');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+
+    try {
+        const data = await api('/api/generate/script', {
+            method: 'POST',
+            body: JSON.stringify({ topic, duration_minutes: duration })
+        });
+        editor.value = data.script;
+        editor.dispatchEvent(new Event('input'));
+        showToast('Script generated');
+
+        // Auto-save and parse
+        await saveScript();
+        await parseScript();
+    } catch (err) {
+        showToast(err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Script with AI';
+    }
+}
+
+async function parseScript() {
+    const text = editor.value.trim();
+    if (!text) { showToast('No script to parse', 'error'); return; }
+
+    const duration = parseInt(document.getElementById('gen-duration').value) || 5;
+
+    try {
+        const data = await api('/api/parse/script', {
+            method: 'POST',
+            body: JSON.stringify({ script_text: text, project_id: PROJECT_ID, duration_minutes: duration })
+        });
+        renderSegments(data.segments);
+        showToast(`Parsed ${data.segments.length} segments`);
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function renderSegments(segments) {
+    const list = document.getElementById('segment-list');
+    if (!segments || segments.length === 0) {
+        list.innerHTML = '<p style="color: var(--text-muted); font-size: 13px; text-align: center;">No segments</p>';
+        return;
+    }
+
+    list.innerHTML = segments.map(s => `
+        <div class="segment-item">
+            <span class="seg-type ${s.type}">${s.type}</span>
+            <span class="seg-title">${s.section}: ${s.title}</span>
+            <span class="seg-duration">${s.duration_seconds}s</span>
+        </div>
+    `).join('');
+}
+
+async function generateAudio() {
+    const btn = document.getElementById('btn-gen-audio');
+    const status = document.getElementById('audio-status');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    status.textContent = 'Generating audio for all segments...';
+
+    const voice = document.getElementById('voice-select').value;
+
+    try {
+        // Save script first
+        await saveScript();
+
+        // Parse if not already
+        const text = editor.value.trim();
+        if (text) {
+            const duration = parseInt(document.getElementById('gen-duration').value) || 5;
+            await api('/api/parse/script', {
+                method: 'POST',
+                body: JSON.stringify({ script_text: text, project_id: PROJECT_ID, duration_minutes: duration })
+            });
+        }
+
+        const data = await api('/api/audio/generate-all', {
+            method: 'POST',
+            body: JSON.stringify({ project_id: PROJECT_ID, voice })
+        });
+
+        const totalMin = (data.total_duration_seconds / 60).toFixed(1);
+        status.textContent = `${data.segments_generated} segments, ${totalMin} min total`;
+        showToast('Audio generated', 'success');
+    } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+        showToast(err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate All Audio';
+    }
+}
+
+// Ctrl+S to save
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveScript();
+    }
+});
+</script>
+{% endblock %}

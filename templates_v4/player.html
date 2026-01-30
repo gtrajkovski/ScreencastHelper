@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+{% block title %}Player - {{ project.name }}{% endblock %}
+
+{% block nav_items %}
+<a href="/dashboard" class="nav-link">Dashboard</a>
+<a href="/workspace/{{ project.id }}" class="nav-link">Workspace</a>
+<a href="/player/{{ project.id }}" class="nav-link active">Player</a>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/jupyter.css') }}">
+<style>
+    .player-layout {
+        display: flex;
+        height: calc(100vh - 52px);
+        overflow: hidden;
+    }
+
+    /* Left: Jupyter simulation */
+    .player-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        position: relative;
+    }
+
+    .sim-container {
+        flex: 1;
+        overflow: hidden;
+        background: #1e1e1e;
+    }
+
+    /* Canvas overlay for recording */
+    #capture-canvas {
+        display: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+
+    /* Right: Control panel */
+    .player-sidebar {
+        width: 350px;
+        background: var(--bg-secondary);
+        border-left: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .sidebar-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+
+    .sidebar-header h2 { font-size: 16px; font-weight: 600; }
+
+    /* Segment badges */
+    .segment-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .seg-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 500;
+        background: var(--bg-card);
+        color: var(--text-secondary);
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+    }
+
+    .seg-badge:hover { background: var(--border-color); }
+    .seg-badge.active { background: var(--accent); color: white; }
+    .seg-badge.completed { background: rgba(16, 185, 129, 0.15); color: var(--accent-success); }
+
+    /* Teleprompter */
+    .teleprompter {
+        flex: 1;
+        padding: 16px;
+        overflow-y: auto;
+        font-size: 15px;
+        line-height: 1.8;
+        color: var(--text-secondary);
+    }
+
+    .narration-block {
+        margin-bottom: 16px;
+        padding: 8px 12px;
+        border-radius: var(--radius);
+        transition: background 0.2s;
+    }
+
+    .narration-block.active {
+        background: var(--bg-card);
+        color: var(--text-primary);
+    }
+
+    .narration-block .section-tag {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: rgba(59, 130, 246, 0.15);
+        color: var(--accent);
+        margin-bottom: 6px;
+    }
+
+    /* Progress */
+    .progress-section {
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .progress-track {
+        height: 4px;
+        background: var(--bg-card);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 6px;
+        cursor: pointer;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: var(--gradient-accent);
+        border-radius: 2px;
+        width: 0%;
+        transition: width 0.1s linear;
+    }
+
+    .progress-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Transport controls */
+    .transport {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .transport-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: var(--bg-card);
+        color: var(--text-primary);
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s;
+    }
+
+    .transport-btn:hover { background: var(--border-color); }
+
+    .transport-btn.play-btn {
+        width: 50px;
+        height: 50px;
+        background: var(--accent);
+        color: white;
+        font-size: 20px;
+    }
+
+    .transport-btn.play-btn:hover { background: var(--accent-hover); }
+
+    .transport-btn.rec-btn { background: var(--accent-danger); color: white; }
+    .transport-btn.rec-btn:hover { opacity: 0.9; }
+
+    .transport-btn.rec-btn.recording {
+        animation: rec-pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes rec-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+        50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    }
+
+    /* Status bar */
+    .player-status {
+        padding: 6px 16px;
+        font-size: 11px;
+        color: var(--text-muted);
+        background: var(--bg-primary);
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+
+    /* Shortcuts */
+    .shortcuts {
+        padding: 6px 16px;
+        font-size: 10px;
+        color: var(--text-muted);
+        text-align: center;
+        border-top: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+
+    .shortcuts kbd {
+        padding: 1px 4px;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+        font-family: inherit;
+        background: var(--bg-card);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="player-layout">
+    <!-- Left: Jupyter simulation -->
+    <div class="player-main">
+        <div class="sim-container" id="sim-container"></div>
+        <canvas id="capture-canvas" width="1920" height="1080"></canvas>
+    </div>
+
+    <!-- Right: Controls -->
+    <div class="player-sidebar">
+        <div class="sidebar-header">
+            <h2>Player</h2>
+            <a href="/workspace/{{ project.id }}" class="btn btn-sm">Back to Editor</a>
+        </div>
+
+        <div class="segment-nav" id="segment-nav">
+            <span style="color: var(--text-muted); font-size: 12px;">Loading segments...</span>
+        </div>
+
+        <div class="teleprompter" id="teleprompter">
+            <p style="color: var(--text-muted); text-align: center; margin-top: 40px;">
+                Loading...
+            </p>
+        </div>
+
+        <div class="progress-section">
+            <div class="progress-track" id="progress-track">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div class="progress-info">
+                <span id="time-current">0:00</span>
+                <span id="time-total">0:00</span>
+            </div>
+        </div>
+
+        <div class="transport">
+            <button class="transport-btn" id="btn-prev" title="Previous (Left arrow)">&#9664;&#9664;</button>
+            <button class="transport-btn play-btn" id="btn-play" title="Play/Pause (Space)">&#9654;</button>
+            <button class="transport-btn" id="btn-next" title="Next (Right arrow)">&#9654;&#9654;</button>
+            <button class="transport-btn rec-btn" id="btn-record" title="Record (R)">&#9679;</button>
+            <button class="transport-btn" id="btn-stop" title="Stop (S)">&#9632;</button>
+        </div>
+
+        <div class="shortcuts">
+            <kbd>Space</kbd> Play &nbsp;
+            <kbd>&#8592;</kbd><kbd>&#8594;</kbd> Navigate &nbsp;
+            <kbd>R</kbd> Record &nbsp;
+            <kbd>S</kbd> Stop
+        </div>
+
+        <div class="player-status">
+            <span id="status-text">Ready</span>
+            <span id="status-segment">-</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/jupyter-sim.js') }}"></script>
+<script src="{{ url_for('static', filename='js/typewriter.js') }}"></script>
+<script src="{{ url_for('static', filename='js/audio-controller.js') }}"></script>
+<script src="{{ url_for('static', filename='js/playback-engine.js') }}"></script>
+<script src="{{ url_for('static', filename='js/recorder.js') }}"></script>
+<script>
+const PROJECT_ID = '{{ project.id }}';
+const PROJECT_NAME = {{ project.name | tojson }};
+
+// Initialize player on load
+document.addEventListener('DOMContentLoaded', async () => {
+    const container = document.getElementById('sim-container');
+    const jupyter = new JupyterSimulator(container);
+    jupyter.init(PROJECT_NAME + '.ipynb');
+
+    const typewriter = new TypewriterEngine();
+    const audioCtrl = new AudioController();
+    await audioCtrl.init();
+
+    const engine = new PlaybackEngine(jupyter, typewriter, audioCtrl);
+    const recorder = new Recorder(
+        document.getElementById('capture-canvas'),
+        audioCtrl.getOutputStream()
+    );
+
+    // DOM refs
+    const btnPlay = document.getElementById('btn-play');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    const btnRecord = document.getElementById('btn-record');
+    const btnStop = document.getElementById('btn-stop');
+    const progressFill = document.getElementById('progress-fill');
+    const timeCurrent = document.getElementById('time-current');
+    const timeTotal = document.getElementById('time-total');
+    const statusText = document.getElementById('status-text');
+    const statusSegment = document.getElementById('status-segment');
+    const segmentNav = document.getElementById('segment-nav');
+    const teleprompter = document.getElementById('teleprompter');
+
+    let segments = [];
+    let currentSegIndex = -1;
+    let isRecording = false;
+
+    // Load project data
+    async function loadProject() {
+        statusText.textContent = 'Loading...';
+        try {
+            const project = await api(`/api/projects/${PROJECT_ID}`);
+            segments = project.segments || [];
+
+            if (segments.length === 0) {
+                statusText.textContent = 'No segments. Generate and parse script first.';
+                teleprompter.innerHTML = '<p style="color: var(--text-muted); text-align: center; margin-top: 40px;">No segments found. Go to Workspace to generate a script.</p>';
+                return;
+            }
+
+            buildSegmentNav();
+            buildTeleprompter();
+            statusSegment.textContent = `${segments.length} segments`;
+            statusText.textContent = 'Ready';
+
+            // Load first segment
+            await loadSegment(0);
+        } catch (err) {
+            statusText.textContent = 'Error loading project';
+            console.error(err);
+        }
+    }
+
+    function buildSegmentNav() {
+        segmentNav.innerHTML = segments.map((s, i) => `
+            <span class="seg-badge" data-index="${i}" onclick="window._goToSegment(${i})">
+                ${s.section || s.type || 'Seg ' + (i + 1)}
+            </span>
+        `).join('');
+    }
+
+    function buildTeleprompter() {
+        teleprompter.innerHTML = segments.map((s, i) => `
+            <div class="narration-block" data-index="${i}">
+                <div class="section-tag">${s.section || 'CONTENT'}</div>
+                <div>${s.narration || ''}</div>
+            </div>
+        `).join('');
+    }
+
+    function updateActiveSegment(index) {
+        // Badges
+        segmentNav.querySelectorAll('.seg-badge').forEach((b, i) => {
+            b.classList.toggle('active', i === index);
+            if (i < index) b.classList.add('completed');
+        });
+        // Teleprompter
+        teleprompter.querySelectorAll('.narration-block').forEach((b, i) => {
+            b.classList.toggle('active', i === index);
+        });
+        const activeBlock = teleprompter.querySelector('.narration-block.active');
+        if (activeBlock) activeBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        statusSegment.textContent = `Segment ${index + 1} / ${segments.length}`;
+    }
+
+    async function loadSegment(index) {
+        if (index < 0 || index >= segments.length) return;
+        currentSegIndex = index;
+        updateActiveSegment(index);
+
+        const seg = segments[index];
+
+        // Reset jupyter
+        jupyter.clear();
+
+        // Add cells
+        if (seg.cells && seg.cells.length > 0) {
+            for (const cell of seg.cells) {
+                jupyter.addCell(cell.id, cell.type || 'code', '', null);
+                jupyter.showCell(cell.id);
+            }
+        }
+
+        // Load timeline
+        try {
+            const timeline = await api(`/api/timeline/${seg.id}?project_id=${PROJECT_ID}`);
+
+            // Check for audio
+            const audioUrl = `/api/audio/${seg.id}?project_id=${PROJECT_ID}`;
+            let hasAudio = false;
+            try {
+                const audioResp = await fetch(audioUrl, { method: 'HEAD' });
+                hasAudio = audioResp.ok;
+            } catch {}
+
+            engine.loadSegment(seg, timeline, hasAudio ? audioUrl : null);
+
+            const totalSec = (timeline.total_duration_ms || 0) / 1000;
+            timeTotal.textContent = formatTime(totalSec);
+            timeCurrent.textContent = '0:00';
+            progressFill.style.width = '0%';
+
+        } catch (err) {
+            console.warn('Timeline not available:', err);
+            engine.loadSegment(seg, { events: [], total_duration_ms: seg.duration_seconds * 1000 }, null);
+        }
+    }
+
+    // Playback callbacks
+    engine.onProgress = (timeMs, totalMs) => {
+        const fraction = totalMs > 0 ? timeMs / totalMs : 0;
+        progressFill.style.width = `${fraction * 100}%`;
+        timeCurrent.textContent = formatTime(timeMs / 1000);
+    };
+
+    engine.onComplete = () => {
+        btnPlay.innerHTML = '&#9654;';
+        statusText.textContent = 'Segment complete';
+
+        // Auto-advance
+        if (currentSegIndex < segments.length - 1) {
+            loadSegment(currentSegIndex + 1);
+            if (engine.isPlaying) engine.play();
+        } else {
+            statusText.textContent = 'Playback complete';
+            if (isRecording) stopRecording();
+        }
+    };
+
+    // Controls
+    btnPlay.addEventListener('click', () => {
+        if (engine.isPlaying) {
+            engine.pause();
+            btnPlay.innerHTML = '&#9654;';
+            statusText.textContent = 'Paused';
+        } else {
+            engine.play();
+            btnPlay.innerHTML = '&#10074;&#10074;';
+            statusText.textContent = 'Playing';
+        }
+    });
+
+    btnPrev.addEventListener('click', () => {
+        if (currentSegIndex > 0) {
+            engine.stop();
+            loadSegment(currentSegIndex - 1);
+            btnPlay.innerHTML = '&#9654;';
+        }
+    });
+
+    btnNext.addEventListener('click', () => {
+        if (currentSegIndex < segments.length - 1) {
+            engine.stop();
+            loadSegment(currentSegIndex + 1);
+            btnPlay.innerHTML = '&#9654;';
+        }
+    });
+
+    btnRecord.addEventListener('click', async () => {
+        if (isRecording) {
+            await stopRecording();
+        } else {
+            await startRecording();
+        }
+    });
+
+    btnStop.addEventListener('click', async () => {
+        engine.stop();
+        btnPlay.innerHTML = '&#9654;';
+        progressFill.style.width = '0%';
+        timeCurrent.textContent = '0:00';
+        statusText.textContent = 'Stopped';
+        if (isRecording) await stopRecording();
+    });
+
+    async function startRecording() {
+        try {
+            // Set up canvas capture from sim-container
+            const simEl = document.getElementById('sim-container');
+            const canvas = document.getElementById('capture-canvas');
+            canvas.width = simEl.offsetWidth;
+            canvas.height = simEl.offsetHeight;
+
+            recorder.setSource(simEl, audioCtrl.getOutputStream());
+            recorder.start();
+            isRecording = true;
+            btnRecord.classList.add('recording');
+            statusText.textContent = 'Recording...';
+
+            // Auto-play
+            if (!engine.isPlaying) {
+                engine.play();
+                btnPlay.innerHTML = '&#10074;&#10074;';
+            }
+        } catch (err) {
+            showToast('Recording failed: ' + err.message, 'error');
+        }
+    }
+
+    async function stopRecording() {
+        if (!isRecording) return;
+        try {
+            const blob = await recorder.stop();
+            isRecording = false;
+            btnRecord.classList.remove('recording');
+            statusText.textContent = 'Recording saved';
+
+            // Upload to server
+            const formData = new FormData();
+            formData.append('video', blob, `${segments[currentSegIndex]?.id || 'recording'}.webm`);
+            formData.append('project_id', PROJECT_ID);
+            formData.append('segment_id', segments[currentSegIndex]?.id || 'full');
+
+            const resp = await fetch('/api/recordings/upload', { method: 'POST', body: formData });
+            const data = await resp.json();
+
+            if (data.success) {
+                showToast('Recording saved', 'success');
+                // Also offer download
+                recorder.download(`${PROJECT_NAME}_${segments[currentSegIndex]?.id || 'recording'}.webm`, blob);
+            }
+        } catch (err) {
+            showToast('Save failed: ' + err.message, 'error');
+        }
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        switch (e.key) {
+            case ' ': e.preventDefault(); btnPlay.click(); break;
+            case 'ArrowLeft': e.preventDefault(); btnPrev.click(); break;
+            case 'ArrowRight': e.preventDefault(); btnNext.click(); break;
+            case 'r': case 'R': btnRecord.click(); break;
+            case 's': case 'S': btnStop.click(); break;
+        }
+    });
+
+    // Expose for segment nav clicks
+    window._goToSegment = (i) => {
+        engine.stop();
+        loadSegment(i);
+        btnPlay.innerHTML = '&#9654;';
+    };
+
+    function formatTime(sec) {
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    loadProject();
+});
+</script>
+{% endblock %}
