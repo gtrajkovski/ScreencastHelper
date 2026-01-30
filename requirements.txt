@@ -16,5 +16,5 @@ nbformat>=5.9.0
 flask-cors>=4.0.0
 mss>=9.0.0  # For screen capture fallback
 # v4.0 dependencies
-edge-tts>=6.1.0
+edge-tts>=7.2.0
 mutagen>=1.47.0

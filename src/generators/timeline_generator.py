@@ -104,8 +104,8 @@ class TimelineGenerator:
 
             # Estimate typing duration
             typing_duration = len(code) / self.typing_speed
-            # Cap at 80% of cell time to leave room for execution
-            typing_duration = min(typing_duration, time_per_cell * 0.8)
+            # Cap at 65% of cell time to leave room for focus + execution
+            typing_duration = min(typing_duration, time_per_cell * 0.65)
 
             # Focus cell
             events.append(TimedEvent(
@@ -115,7 +115,7 @@ class TimelineGenerator:
             ))
 
             # Start typing
-            type_start = cell_start + 0.3
+            type_start = cell_start + 0.2
             events.append(TimedEvent(
                 time=type_start,
                 action='startTyping',
@@ -127,21 +127,23 @@ class TimelineGenerator:
             ))
 
             # Execute cell (after typing completes)
-            exec_time = type_start + typing_duration + 0.5
-            if exec_time < cell_start + time_per_cell:
-                events.append(TimedEvent(
-                    time=exec_time,
-                    action='executeCell',
-                    params={'cellIndex': i}
-                ))
+            exec_time = type_start + typing_duration + 0.3
+            # Always include executeCell, clamped to within cell time
+            exec_time = min(exec_time, cell_start + time_per_cell * 0.90)
+            events.append(TimedEvent(
+                time=exec_time,
+                action='executeCell',
+                params={'cellIndex': i}
+            ))
 
-                # Show output
-                if output:
-                    events.append(TimedEvent(
-                        time=exec_time + 0.3,
-                        action='showOutput',
-                        params={'cellIndex': i, 'output': output}
-                    ))
+            # Show output
+            if output:
+                output_time = min(exec_time + 0.3, cell_start + time_per_cell * 0.95)
+                events.append(TimedEvent(
+                    time=output_time,
+                    action='showOutput',
+                    params={'cellIndex': i, 'output': output}
+                ))
 
         return events
 
