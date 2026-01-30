@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segment Recorder - ScreenCast Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+
+        .header .project-name {
+            font-size: 14px;
+            color: #94a3b8;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .progress-text {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .progress-text span { color: #22c55e; font-weight: 600; }
+
+        .btn-back {
+            padding: 6px 14px;
+            background: #334155;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+        }
+
+        .btn-back:hover { background: #475569; }
+
+        /* Segment Badge Strip */
+        .badge-strip {
+            display: flex;
+            gap: 8px;
+            padding: 12px 24px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            overflow-x: auto;
+            flex-shrink: 0;
+        }
+
+        .badge-strip::-webkit-scrollbar { height: 4px; }
+        .badge-strip::-webkit-scrollbar-track { background: #1e293b; }
+        .badge-strip::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+
+        .segment-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 2px solid #334155;
+            background: #0f172a;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 13px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .segment-badge:hover { border-color: #60a5fa; }
+
+        .segment-badge.active {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .segment-badge .status-icon {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #475569;
+            flex-shrink: 0;
+        }
+
+        .segment-badge.pending .status-icon { border-color: #475569; }
+
+        .segment-badge.recording .status-icon {
+            background: #ef4444;
+            border-color: #ef4444;
+            animation: pulse-red 1s infinite;
+        }
+
+        .segment-badge.recorded .status-icon {
+            background: #22c55e;
+            border-color: #22c55e;
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .segment-badge .badge-label {
+            font-weight: 500;
+            color: #e2e8f0;
+        }
+
+        .segment-badge .badge-section {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+
+        /* Main Content */
+        .main-content {
+            display: grid;
+            grid-template-columns: 60% 40%;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Teleprompter Panel */
+        .teleprompter-panel {
+            padding: 32px;
+            overflow-y: auto;
+            border-right: 1px solid #334155;
+        }
+
+        .teleprompter-panel::-webkit-scrollbar { width: 6px; }
+        .teleprompter-panel::-webkit-scrollbar-track { background: transparent; }
+        .teleprompter-panel::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        .segment-section-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #60a5fa;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .segment-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: 20px;
+            line-height: 1.3;
+        }
+
+        .visual-cues {
+            margin-bottom: 16px;
+        }
+
+        .visual-cue {
+            display: inline-block;
+            padding: 4px 10px;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 4px;
+            color: #4ade80;
+            font-size: 12px;
+            font-style: italic;
+            margin: 2px 4px 2px 0;
+        }
+
+        .narration-text {
+            font-size: 22px;
+            line-height: 1.8;
+            color: #e2e8f0;
+            font-weight: 300;
+        }
+
+        .narration-text .pause-marker {
+            display: inline-block;
+            padding: 2px 8px;
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 4px;
+            color: #fbbf24;
+            font-size: 12px;
+            font-weight: 500;
+            margin: 0 4px;
+            vertical-align: middle;
+        }
+
+        /* Controls Panel */
+        .controls-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            gap: 24px;
+        }
+
+        .segment-info {
+            text-align: center;
+        }
+
+        .segment-info .info-label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .segment-info .info-value {
+            font-size: 16px;
+            color: #e2e8f0;
+            font-weight: 500;
+            margin-top: 4px;
+        }
+
+        .timer-display {
+            font-family: 'Fira Code', monospace;
+            font-size: 48px;
+            font-weight: 700;
+            color: #f8fafc;
+            text-align: center;
+        }
+
+        .timer-display.recording { color: #ef4444; }
+
+        .target-duration {
+            font-size: 14px;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        .record-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-record {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 4px solid #ef4444;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .btn-record:hover { background: rgba(239, 68, 68, 0.1); }
+
+        .btn-record .record-dot {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #ef4444;
+            transition: all 0.2s;
+        }
+
+        .btn-record.is-recording .record-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            animation: pulse-red 1s infinite;
+        }
+
+        .btn-record-label {
+            font-size: 13px;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn-action {
+            padding: 8px 18px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #334155;
+            color: #e2e8f0;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-action:hover { background: #475569; }
+        .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-action.preview { border-color: #3b82f6; color: #60a5fa; }
+        .btn-action.preview:hover { background: rgba(59, 130, 246, 0.15); }
+
+        .btn-action.re-record { border-color: #f59e0b; color: #fbbf24; }
+        .btn-action.re-record:hover { background: rgba(245, 158, 11, 0.15); }
+
+        /* Bottom Bar */
+        .bottom-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            background: #1e293b;
+            border-top: 1px solid #334155;
+            flex-shrink: 0;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-nav {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #334155;
+            color: #e2e8f0;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .btn-nav:hover { background: #475569; }
+        .btn-nav:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-export {
+            padding: 8px 20px;
+            border-radius: 6px;
+            border: none;
+            background: #22c55e;
+            color: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-export:hover { background: #16a34a; }
+        .btn-export:disabled { opacity: 0.4; cursor: not-allowed; background: #475569; }
+
+        .keyboard-hint {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .keyboard-hint kbd {
+            padding: 2px 6px;
+            background: #334155;
+            border: 1px solid #475569;
+            border-radius: 3px;
+            font-family: 'Fira Code', monospace;
+            font-size: 10px;
+        }
+
+        /* Countdown Overlay */
+        .countdown-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .countdown-overlay.visible { display: flex; }
+
+        .countdown-number {
+            font-size: 160px;
+            font-weight: 800;
+            color: #f8fafc;
+            animation: countdown-pop 0.8s ease-out;
+        }
+
+        @keyframes countdown-pop {
+            0% { transform: scale(2); opacity: 0; }
+            30% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0.8); opacity: 0; }
+        }
+
+        /* Preview Modal */
+        .preview-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 900;
+        }
+
+        .preview-modal.visible { display: flex; }
+
+        .preview-content {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 900px;
+            width: 90%;
+        }
+
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .preview-header h3 {
+            font-size: 18px;
+            color: #f8fafc;
+        }
+
+        .btn-close-preview {
+            padding: 6px 12px;
+            background: #334155;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            color: #e2e8f0;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .btn-close-preview:hover { background: #475569; }
+
+        .preview-video {
+            width: 100%;
+            border-radius: 8px;
+            background: #000;
+        }
+
+        .preview-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            justify-content: flex-end;
+        }
+
+        /* Loading */
+        .loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 16px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #334155;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="spinner"></div>
+        <div style="color: #94a3b8;">Loading segments...</div>
+    </div>
+
+    <!-- Main App (hidden until loaded) -->
+    <div id="app" style="display: none; flex-direction: column; height: 100vh;">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1>Segment Recorder</h1>
+                <span class="project-name" id="project-name"></span>
+            </div>
+            <div class="header-right">
+                <span class="progress-text">
+                    <span id="recorded-count">0</span>/<span id="total-count">0</span> recorded
+                </span>
+                <a href="/workspace" class="btn-back">Back to Workspace</a>
+            </div>
+        </div>
+
+        <!-- Badge Strip -->
+        <div class="badge-strip" id="badge-strip"></div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Teleprompter -->
+            <div class="teleprompter-panel" id="teleprompter">
+                <div class="segment-section-label" id="section-label"></div>
+                <div class="segment-title" id="segment-title"></div>
+                <div class="visual-cues" id="visual-cues"></div>
+                <div class="narration-text" id="narration-text"></div>
+            </div>
+
+            <!-- Controls -->
+            <div class="controls-panel">
+                <div class="segment-info">
+                    <div class="info-label">Segment</div>
+                    <div class="info-value" id="segment-number">1 of 5</div>
+                </div>
+
+                <div class="timer-display" id="timer">00:00</div>
+                <div class="target-duration" id="target-duration">Target: 0:42</div>
+
+                <div class="record-controls">
+                    <button class="btn-record" id="btn-record" onclick="toggleRecording()">
+                        <div class="record-dot"></div>
+                    </button>
+                    <div class="btn-record-label" id="record-label">Press R to record</div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn-action preview" id="btn-preview" onclick="previewSegment()" disabled>Preview</button>
+                    <button class="btn-action re-record" id="btn-rerecord" onclick="reRecordSegment()" disabled>Re-record</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Bar -->
+        <div class="bottom-bar">
+            <div class="nav-buttons">
+                <button class="btn-nav" id="btn-prev" onclick="navigate(-1)">Prev</button>
+                <button class="btn-nav" id="btn-next" onclick="navigate(1)">Next</button>
+            </div>
+            <div class="keyboard-hint">
+                <kbd>R</kbd> Record &nbsp; <kbd>S</kbd> Stop &nbsp;
+                <kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp;
+                <kbd>E</kbd> Export
+            </div>
+            <button class="btn-export" id="btn-export" onclick="exportAll()" disabled>Export ZIP</button>
+        </div>
+    </div>
+
+    <!-- Countdown Overlay -->
+    <div class="countdown-overlay" id="countdown-overlay">
+        <div class="countdown-number" id="countdown-number">3</div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div class="preview-modal" id="preview-modal">
+        <div class="preview-content">
+            <div class="preview-header">
+                <h3 id="preview-title">Preview</h3>
+                <button class="btn-close-preview" onclick="closePreview()">Close</button>
+            </div>
+            <video class="preview-video" id="preview-video" controls></video>
+            <div class="preview-actions">
+                <button class="btn-action re-record" onclick="closePreview(); reRecordSegment();">Re-record</button>
+                <button class="btn-action preview" onclick="closePreview()">Accept</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        const state = {
+            segments: [],
+            currentIndex: 0,
+            isRecording: false,
+            timerSeconds: 0,
+            timerInterval: null,
+            scrollInterval: null,
+            projectName: ''
+        };
+
+        // Initialize
+        async function init() {
+            let resp = await fetch('/api/segments');
+            if (!resp.ok) {
+                // Try parsing first
+                const parseResp = await fetch('/api/parse-segments', { method: 'POST' });
+                if (!parseResp.ok) {
+                    document.getElementById('loading-screen').innerHTML =
+                        '<div style="color:#ef4444;font-size:18px;">No script found. Generate a script first.</div>' +
+                        '<a href="/workspace" class="btn-back" style="margin-top:16px;">Back to Workspace</a>';
+                    return;
+                }
+                resp = await fetch('/api/segments');
+            }
+
+            const data = await resp.json();
+            if (!data.success) {
+                document.getElementById('loading-screen').innerHTML =
+                    '<div style="color:#ef4444;">Failed to load segments</div>';
+                return;
+            }
+
+            state.segments = data.segments;
+            state.projectName = data.project_name || 'Untitled';
+            document.getElementById('project-name').textContent = state.projectName;
+            document.getElementById('total-count').textContent = state.segments.length;
+
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('app').style.display = 'flex';
+
+            renderBadges();
+            selectSegment(0);
+            updateProgress();
+        }
+
+        // Render badge strip
+        function renderBadges() {
+            const strip = document.getElementById('badge-strip');
+            strip.innerHTML = state.segments.map((seg, i) => `
+                <div class="segment-badge ${seg.status} ${i === state.currentIndex ? 'active' : ''}"
+                     id="badge-${i}" onclick="selectSegment(${i})">
+                    <div class="status-icon"></div>
+                    <div>
+                        <div class="badge-label">${seg.title || seg.section}</div>
+                        <div class="badge-section">${seg.section}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Select segment
+        function selectSegment(index) {
+            if (state.isRecording) return; // Don't switch during recording
+            if (index < 0 || index >= state.segments.length) return;
+
+            state.currentIndex = index;
+            const seg = state.segments[index];
+
+            // Update badges
+            document.querySelectorAll('.segment-badge').forEach((b, i) => {
+                b.classList.toggle('active', i === index);
+            });
+
+            // Scroll badge into view
+            const badge = document.getElementById(`badge-${index}`);
+            if (badge) badge.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+
+            // Update teleprompter
+            document.getElementById('section-label').textContent = seg.section;
+            document.getElementById('segment-title').textContent = seg.title || seg.section;
+
+            // Visual cues
+            const cuesEl = document.getElementById('visual-cues');
+            if (seg.visual_cues && seg.visual_cues.length) {
+                cuesEl.innerHTML = seg.visual_cues.map(c => {
+                    const safe = c.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `<span class="visual-cue">${safe}</span>`;
+                }).join('');
+                cuesEl.style.display = 'block';
+            } else {
+                cuesEl.style.display = 'none';
+            }
+
+            // Narration with PAUSE markers (sanitize first to prevent XSS)
+            let narration = seg.narration || '';
+            narration = narration.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            narration = narration.replace(/\[PAUSE\]/gi,
+                '<span class="pause-marker">PAUSE</span>');
+            narration = narration.replace(/\n/g, '<br>');
+            document.getElementById('narration-text').innerHTML = narration;
+
+            // Reset scroll
+            document.getElementById('teleprompter').scrollTop = 0;
+
+            // Update controls
+            document.getElementById('segment-number').textContent =
+                `${index + 1} of ${state.segments.length}`;
+
+            const mins = Math.floor(seg.duration_seconds / 60);
+            const secs = seg.duration_seconds % 60;
+            document.getElementById('target-duration').textContent =
+                `Target: ${mins}:${secs.toString().padStart(2, '0')}`;
+
+            // Update action buttons
+            const isRecorded = seg.status === 'recorded';
+            document.getElementById('btn-preview').disabled = !isRecorded;
+            document.getElementById('btn-rerecord').disabled = !isRecorded;
+
+            // Nav buttons
+            document.getElementById('btn-prev').disabled = index === 0;
+            document.getElementById('btn-next').disabled = index === state.segments.length - 1;
+
+            // Reset timer display if not recording
+            if (!state.isRecording) {
+                document.getElementById('timer').textContent = '00:00';
+                document.getElementById('timer').classList.remove('recording');
+                document.getElementById('btn-record').classList.remove('is-recording');
+                document.getElementById('record-label').textContent = 'Press R to record';
+            }
+        }
+
+        // Navigate
+        function navigate(dir) {
+            selectSegment(state.currentIndex + dir);
+        }
+
+        // Toggle recording
+        function toggleRecording() {
+            if (state.isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+
+        // Start recording with countdown
+        async function startRecording() {
+            if (state.isRecording) return;
+
+            // Countdown
+            const overlay = document.getElementById('countdown-overlay');
+            const numEl = document.getElementById('countdown-number');
+            overlay.classList.add('visible');
+
+            for (let n = 3; n >= 1; n--) {
+                numEl.textContent = n;
+                numEl.style.animation = 'none';
+                numEl.offsetHeight; // reflow
+                numEl.style.animation = 'countdown-pop 0.8s ease-out';
+                await new Promise(r => setTimeout(r, 900));
+            }
+            overlay.classList.remove('visible');
+
+            // Start FFmpeg
+            const segId = state.currentIndex;
+            const resp = await fetch(`/api/segments/${segId}/record`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+
+            const data = await resp.json();
+            if (!data.success) {
+                alert('Recording failed: ' + data.message);
+                return;
+            }
+
+            state.isRecording = true;
+            state.timerSeconds = 0;
+            state.segments[segId].status = 'recording';
+
+            // Update UI
+            document.getElementById('btn-record').classList.add('is-recording');
+            document.getElementById('timer').classList.add('recording');
+            document.getElementById('record-label').textContent = 'Press S to stop';
+            renderBadges();
+            selectBadgeOnly(segId);
+
+            // Start timer
+            state.timerInterval = setInterval(() => {
+                state.timerSeconds++;
+                const m = Math.floor(state.timerSeconds / 60);
+                const s = state.timerSeconds % 60;
+                document.getElementById('timer').textContent =
+                    `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }, 1000);
+
+            // Start auto-scroll
+            startAutoScroll();
+        }
+
+        // Stop recording
+        async function stopRecording() {
+            if (!state.isRecording) return;
+
+            const segId = state.currentIndex;
+
+            // Stop timer
+            clearInterval(state.timerInterval);
+            state.timerInterval = null;
+            stopAutoScroll();
+
+            // Stop FFmpeg
+            const resp = await fetch(`/api/segments/${segId}/stop`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await resp.json();
+            state.isRecording = false;
+
+            if (data.success) {
+                state.segments[segId].status = 'recorded';
+                state.segments[segId].file_size = data.file_size;
+            } else {
+                state.segments[segId].status = 'pending';
+                alert('Stop failed: ' + data.message);
+            }
+
+            // Update UI
+            document.getElementById('btn-record').classList.remove('is-recording');
+            document.getElementById('timer').classList.remove('recording');
+            document.getElementById('record-label').textContent = 'Press R to record';
+            renderBadges();
+            selectBadgeOnly(segId);
+            updateProgress();
+
+            // Enable preview/re-record if recorded
+            const isRecorded = state.segments[segId].status === 'recorded';
+            document.getElementById('btn-preview').disabled = !isRecorded;
+            document.getElementById('btn-rerecord').disabled = !isRecorded;
+        }
+
+        // Helper to re-highlight active badge without full selectSegment
+        function selectBadgeOnly(index) {
+            document.querySelectorAll('.segment-badge').forEach((b, i) => {
+                b.classList.toggle('active', i === index);
+            });
+        }
+
+        // Auto-scroll teleprompter
+        function startAutoScroll() {
+            const panel = document.getElementById('teleprompter');
+            const seg = state.segments[state.currentIndex];
+            const totalHeight = panel.scrollHeight - panel.clientHeight;
+            if (totalHeight <= 0) return;
+
+            const durationMs = seg.duration_seconds * 1000;
+            const intervalMs = 50;
+            const scrollPerTick = totalHeight / (durationMs / intervalMs);
+
+            state.scrollInterval = setInterval(() => {
+                panel.scrollTop += scrollPerTick;
+                if (panel.scrollTop >= totalHeight) {
+                    stopAutoScroll();
+                }
+            }, intervalMs);
+        }
+
+        function stopAutoScroll() {
+            if (state.scrollInterval) {
+                clearInterval(state.scrollInterval);
+                state.scrollInterval = null;
+            }
+        }
+
+        // Preview
+        function previewSegment() {
+            const seg = state.segments[state.currentIndex];
+            if (!seg || seg.status !== 'recorded') return;
+
+            const modal = document.getElementById('preview-modal');
+            const video = document.getElementById('preview-video');
+            document.getElementById('preview-title').textContent =
+                `Preview: ${seg.title || seg.section}`;
+
+            video.onerror = () => {
+                alert('Failed to load video preview');
+                closePreview();
+            };
+            video.src = `/api/segments/${state.currentIndex}/preview?t=${Date.now()}`;
+            modal.classList.add('visible');
+        }
+
+        function closePreview() {
+            const modal = document.getElementById('preview-modal');
+            const video = document.getElementById('preview-video');
+            video.pause();
+            video.src = '';
+            modal.classList.remove('visible');
+        }
+
+        // Re-record
+        function reRecordSegment() {
+            const seg = state.segments[state.currentIndex];
+            if (!seg) return;
+            seg.status = 'pending';
+            seg.file_path = null;
+            seg.file_size = null;
+            seg.recorded_at = null;
+
+            renderBadges();
+            selectBadgeOnly(state.currentIndex);
+            updateProgress();
+
+            document.getElementById('btn-preview').disabled = true;
+            document.getElementById('btn-rerecord').disabled = true;
+            document.getElementById('timer').textContent = '00:00';
+        }
+
+        // Update progress
+        function updateProgress() {
+            const recorded = state.segments.filter(s => s.status === 'recorded').length;
+            document.getElementById('recorded-count').textContent = recorded;
+
+            const allDone = recorded === state.segments.length && state.segments.length > 0;
+            document.getElementById('btn-export').disabled = !allDone;
+        }
+
+        // Export
+        async function exportAll() {
+            const recorded = state.segments.filter(s => s.status === 'recorded').length;
+            if (recorded < state.segments.length) {
+                alert(`Record all segments first (${recorded}/${state.segments.length} done)`);
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/segments/export', { method: 'POST' });
+                if (!resp.ok) {
+                    try {
+                        const err = await resp.json();
+                        alert('Export failed: ' + err.message);
+                    } catch {
+                        alert('Export failed: HTTP ' + resp.status);
+                    }
+                    return;
+                }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${state.projectName.replace(/\s+/g, '_')}_segments.zip`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Export error: ' + e.message);
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Don't handle if modal is open and it's not Escape/Space
+            const previewOpen = document.getElementById('preview-modal').classList.contains('visible');
+
+            if (previewOpen) {
+                if (e.key === 'Escape') {
+                    closePreview();
+                } else if (e.key === ' ') {
+                    e.preventDefault();
+                    const video = document.getElementById('preview-video');
+                    video.paused ? video.play() : video.pause();
+                }
+                return;
+            }
+
+            switch (e.key.toLowerCase()) {
+                case 'r':
+                    if (!state.isRecording) startRecording();
+                    break;
+                case 's':
+                    if (state.isRecording) stopRecording();
+                    break;
+                case 'arrowright':
+                case 'n':
+                    if (!state.isRecording) navigate(1);
+                    break;
+                case 'arrowleft':
+                case 'p':
+                    if (!state.isRecording) navigate(-1);
+                    break;
+                case 'e':
+                    if (!state.isRecording) exportAll();
+                    break;
+                case 'escape':
+                    break;
+            }
+        });
+
+        // Cleanup on page close
+        window.addEventListener('beforeunload', (e) => {
+            if (state.timerInterval) clearInterval(state.timerInterval);
+            if (state.scrollInterval) clearInterval(state.scrollInterval);
+            if (state.isRecording) {
+                // Attempt to stop recording
+                navigator.sendBeacon(`/api/segments/${state.currentIndex}/stop`, '{}');
+                e.preventDefault();
+                e.returnValue = 'Recording in progress. Are you sure?';
+            }
+        });
+
+        // Init on load
+        init();
+    </script>
+</body>
+</html>

@@ -31,6 +31,13 @@ ai_client = AIClient()
 PROJECTS_DIR = Path(__file__).parent / "projects"
 PROJECTS_DIR.mkdir(exist_ok=True)
 
+def sanitize_filename(name, max_length=50):
+    """Sanitize a string for use in filenames."""
+    import re as _re
+    safe = _re.sub(r'[^\w\s-]', '', name).strip().replace(' ', '_')
+    return safe[:max_length] if safe else 'Untitled'
+
+
 def get_empty_project():
     """Return a clean project structure."""
     return {
@@ -79,6 +86,12 @@ def recording_studio():
 def present():
     """Full-screen presentation mode for recording."""
     return render_template('present.html')
+
+
+@app.route('/segment-recorder')
+def segment_recorder_page():
+    """Segment-based recording page."""
+    return render_template('segment_recorder.html')
 
 
 @app.route('/export')
@@ -717,6 +730,286 @@ def get_presentation_segments():
     })
 
 
+# ============================================================
+# Segment-Based Recording API Endpoints
+# ============================================================
+
+@app.route('/api/parse-segments', methods=['POST'])
+def api_parse_segments():
+    """Parse script into recording segments with file metadata."""
+    script = current_project.get('artifacts', {}).get('narration_script.md', '')
+    if not script:
+        return jsonify({'success': False, 'message': 'No script generated yet'}), 404
+
+    try:
+        duration = current_project.get('duration', 7)
+        segments = parse_script_to_segments(script, duration)
+
+        # Build output directory
+        project_name = current_project.get('topic', 'Untitled')
+        safe_name = sanitize_filename(project_name)
+        date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_dir = Config.OUTPUT_DIR / f"{safe_name}_{date_str}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Track section counts for duplicate naming (e.g., content_a, content_b)
+        section_counts = {}
+        recording_segments = []
+
+        for i, seg in enumerate(segments):
+            section = seg['section'].lower()
+            if section in section_counts:
+                section_counts[section] += 1
+                suffix = chr(ord('a') + section_counts[section] - 1)
+                filename = f"{i+1:02d}_{section}_{suffix}.mp4"
+            else:
+                section_counts[section] = 1
+                # Check if this section appears again later
+                later_same = sum(1 for s in segments[i+1:] if s['section'].lower() == section)
+                if later_same > 0:
+                    filename = f"{i+1:02d}_{section}_a.mp4"
+                else:
+                    filename = f"{i+1:02d}_{section}.mp4"
+
+            rec_seg = {
+                **seg,
+                'status': 'pending',
+                'filename': filename,
+                'file_path': None,
+                'file_size': None,
+                'recorded_at': None
+            }
+            recording_segments.append(rec_seg)
+
+        segment_recorder['segments'] = recording_segments
+        segment_recorder['output_dir'] = str(output_dir)
+        segment_recorder['active_segment'] = None
+        segment_recorder['process'] = None
+        current_project['recording_segments'] = recording_segments
+
+        return jsonify({
+            'success': True,
+            'segments': recording_segments,
+            'total_segments': len(recording_segments),
+            'output_dir': str(output_dir)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/segments', methods=['GET'])
+def get_segments():
+    """Get current recording segments with statuses."""
+    segments = segment_recorder.get('segments', [])
+    if not segments:
+        return jsonify({'success': False, 'message': 'No segments parsed yet'}), 404
+    return jsonify({
+        'success': True,
+        'segments': segments,
+        'total_segments': len(segments),
+        'output_dir': segment_recorder.get('output_dir'),
+        'project_name': current_project.get('topic', 'Untitled')
+    })
+
+
+@app.route('/api/segments/<int:seg_id>/record', methods=['POST'])
+def record_segment(seg_id):
+    """Start recording a specific segment."""
+    import subprocess
+
+    segments = segment_recorder.get('segments', [])
+    if seg_id < 0 or seg_id >= len(segments):
+        return jsonify({'success': False, 'message': 'Invalid segment ID'}), 404
+
+    if segment_recorder.get('active_segment') is not None:
+        active = segment_recorder['active_segment']
+        return jsonify({
+            'success': False,
+            'message': f'Segment {active} is already recording. Stop it first.'
+        }), 409
+
+    seg = segments[seg_id]
+    data = request.json or {}
+
+    # Recording parameters
+    width = int(data.get('width', 1920))
+    height = int(data.get('height', 1080))
+    x = int(data.get('x', 0))
+    y = int(data.get('y', 0))
+    fps = int(data.get('fps', 30))
+
+    ffmpeg_path = find_ffmpeg()
+    if not ffmpeg_path:
+        return jsonify({
+            'success': False,
+            'message': 'FFmpeg not found. Install with: winget install ffmpeg'
+        }), 503
+
+    output_dir = Path(segment_recorder['output_dir'])
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / seg['filename']
+
+    try:
+        cmd = [
+            ffmpeg_path,
+            '-f', 'gdigrab',
+            '-framerate', str(fps),
+            '-offset_x', str(x),
+            '-offset_y', str(y),
+            '-video_size', f'{width}x{height}',
+            '-i', 'desktop',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-pix_fmt', 'yuv420p',
+            '-crf', '23',
+            '-y',
+            str(output_path)
+        ]
+
+        segment_recorder['process'] = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        )
+        segment_recorder['active_segment'] = seg_id
+        seg['status'] = 'recording'
+
+        return jsonify({
+            'success': True,
+            'message': f'Recording segment {seg_id}: {seg["title"]}',
+            'segment_id': seg_id,
+            'filename': seg['filename']
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/segments/<int:seg_id>/stop', methods=['POST'])
+def stop_segment(seg_id):
+    """Stop recording a specific segment."""
+    import subprocess
+
+    segments = segment_recorder.get('segments', [])
+    if seg_id < 0 or seg_id >= len(segments):
+        return jsonify({'success': False, 'message': 'Invalid segment ID'}), 404
+
+    if segment_recorder.get('active_segment') != seg_id:
+        return jsonify({'success': False, 'message': 'This segment is not recording'}), 400
+
+    process = segment_recorder.get('process')
+    if not process:
+        return jsonify({'success': False, 'message': 'No recording process found'}), 400
+
+    try:
+        process.stdin.write(b'q')
+        process.stdin.flush()
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+            process.wait()
+        except Exception:
+            pass
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            pass
+
+    seg = segments[seg_id]
+    output_dir = Path(segment_recorder['output_dir'])
+    file_path = output_dir / seg['filename']
+
+    segment_recorder['active_segment'] = None
+    segment_recorder['process'] = None
+
+    if file_path.exists():
+        file_size = round(file_path.stat().st_size / (1024 * 1024), 2)
+        seg['status'] = 'recorded'
+        seg['file_path'] = str(file_path)
+        seg['file_size'] = file_size
+        seg['recorded_at'] = datetime.now().isoformat()
+
+        return jsonify({
+            'success': True,
+            'message': f'Saved: {seg["filename"]} ({file_size} MB)',
+            'segment_id': seg_id,
+            'filename': seg['filename'],
+            'file_size': file_size
+        })
+    return jsonify({'success': False, 'message': 'Recording file not created'}), 500
+
+
+@app.route('/api/segments/<int:seg_id>/preview', methods=['GET'])
+def preview_segment(seg_id):
+    """Serve recorded segment video for preview."""
+    segments = segment_recorder.get('segments', [])
+    if seg_id < 0 or seg_id >= len(segments):
+        return jsonify({'success': False, 'message': 'Invalid segment ID'}), 404
+
+    seg = segments[seg_id]
+    if not seg.get('file_path') or not os.path.exists(seg['file_path']):
+        return jsonify({'success': False, 'message': 'Segment not recorded yet'}), 404
+
+    # Validate file is within output directory
+    file_path = Path(seg['file_path']).resolve()
+    output_dir = Path(segment_recorder.get('output_dir', '')).resolve()
+    if not str(file_path).startswith(str(output_dir)):
+        return jsonify({'success': False, 'message': 'Invalid file path'}), 400
+
+    return send_file(str(file_path), mimetype='video/mp4')
+
+
+@app.route('/api/segments/export', methods=['POST'])
+def export_segments():
+    """Export all recorded segments as a ZIP file."""
+    import zipfile
+    import tempfile
+
+    segments = segment_recorder.get('segments', [])
+    if not segments:
+        return jsonify({'success': False, 'message': 'No segments parsed yet'}), 400
+
+    recorded = [s for s in segments if s.get('file_path') and os.path.exists(s['file_path'])]
+    if len(recorded) != len(segments):
+        return jsonify({
+            'success': False,
+            'message': f'Not all segments recorded ({len(recorded)}/{len(segments)})'
+        }), 400
+
+    # Create ZIP
+    project_name = current_project.get('topic', 'Untitled')
+    safe_name = sanitize_filename(project_name)
+    zip_filename = f"{safe_name}_segments.zip"
+    zip_path = Config.OUTPUT_DIR / zip_filename
+
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for seg in recorded:
+            zf.write(seg['file_path'], seg['filename'])
+
+        # Add metadata JSON
+        metadata = {
+            'project_name': project_name,
+            'exported_at': datetime.now().isoformat(),
+            'segments': [{
+                'id': s['id'],
+                'section': s['section'],
+                'title': s['title'],
+                'filename': s['filename'],
+                'duration_seconds': s['duration_seconds'],
+                'status': s['status'],
+                'file_size': s.get('file_size'),
+                'recorded_at': s.get('recorded_at')
+            } for s in segments]
+        }
+        zf.writestr('segments.json', json.dumps(metadata, indent=2))
+
+    return send_file(str(zip_path), mimetype='application/zip',
+                     as_attachment=True, download_name=zip_filename)
+
+
 @app.route('/api/recommend-env', methods=['POST'])
 def recommend_environment():
     """Get environment recommendation."""
@@ -1130,6 +1423,14 @@ screen_recorder = {
     "active": False,
     "process": None,
     "filename": None
+}
+
+# Segment-based recording state
+segment_recorder = {
+    "segments": [],
+    "active_segment": None,
+    "output_dir": None,
+    "process": None
 }
 
 

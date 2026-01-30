@@ -131,6 +131,23 @@ async function openPresentationMode() {
     }
 }
 
+// Open Segment Recorder
+async function openSegmentRecorder() {
+    addChatMessage('system', 'Parsing script into recording segments...');
+    try {
+        const response = await fetch('/api/parse-segments', {method: 'POST'});
+        const data = await response.json();
+        if (!data.success) {
+            addChatMessage('assistant', 'Cannot open segment recorder: ' + data.message);
+            return;
+        }
+        addChatMessage('system', `${data.total_segments} segments ready. Opening recorder...`);
+        window.open('/segment-recorder', '_blank');
+    } catch (error) {
+        addChatMessage('assistant', 'Error: ' + error.message);
+    }
+}
+
 // Quick action buttons
 function setupQuickActions() {
     document.querySelectorAll('.quick-btn').forEach(btn => {
