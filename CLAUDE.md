@@ -8,9 +8,16 @@ ScreenCast Studio is an AI-powered screencast production assistant that transfor
 
 ## Commands
 
+### Setup
+```bash
+pip install -r requirements.txt
+cp .env.example .env             # Then add ANTHROPIC_API_KEY
+```
+
 ### Run the Application
 ```bash
 python app_v3.py              # Web app v3.0 on http://127.0.0.1:5555
+python app_v4.py              # Web app v4.0 (browser-native recording, no FFmpeg)
 python -m src.ui.cli <command> # CLI mode
 ```
 
@@ -56,19 +63,23 @@ Section parsing regex: `r'## (HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION)\n(.
 
 `src/environments/base.py` defines `BaseEnvironment` (abstract) and `DemoStep` dataclass. Implementations in `jupyter.py` and `terminal.py`. `ENV_RECOMMENDATIONS` in `src/config.py` maps `DemoType` → `Environment`.
 
-### Web App (v3.0)
+### Web App (v3.0 and v4.0)
 
-Flask app in `app_v3.py` (~2000 lines) with templates in `templates_v3/` and static assets in `static_v3/`. Main frontend logic is in `static_v3/js/workspace.js` (~2000 lines).
+**v3.0** (`app_v3.py`, ~2000 lines): Flask app with templates in `templates_v3/` and static assets in `static_v3/`. Main frontend logic is in `static_v3/js/workspace.js` (~2000 lines). Screen recording uses FFmpeg with Windows GDI capture (`gdigrab`) — Windows only. `find_ffmpeg()` searches PATH, winget, and common install directories.
 
-Key pages: `/` (dashboard), `/workspace` (editor), `/recording` (3-panel recording), `/present` (presentation mode), `/segment-recorder` (per-segment MP4 recording).
+**v4.0** (`app_v4.py`): Browser-native recording via MediaRecorder API and Web Audio — no desktop dependencies (FFmpeg, tkinter). Uses `v4_script_generator.py`, `v4_code_generator.py`, `tts_audio_generator.py` (Edge TTS), and `timeline_generator.py`. Templates in `templates_v4/`, static in `static_v4/`.
+
+Key v3 pages: `/` (dashboard), `/workspace` (editor), `/recording` (3-panel recording), `/present` (presentation mode), `/segment-recorder` (per-segment MP4 recording).
 
 State is held in an in-memory `current_project` dict. Projects persist to `projects/` directory as JSON + artifact files.
-
-Screen recording uses FFmpeg with Windows GDI capture (`gdigrab`). `find_ffmpeg()` searches PATH, winget, and common install directories.
 
 ### TTS Optimization
 
 `TTSOptimizer` uses `Config.TTS_REPLACEMENTS` dictionary (~40 entries with word boundaries) for code-term pronunciation fixes: acronym expansion (`API` → "A-P-I"), file extensions (`.py` → "dot pie"), math notation (`O(n²)` → "O of n squared").
+
+### TTS Audio Generation (v4.0)
+
+`TTSAudioGenerator` in `src/generators/tts_audio_generator.py` synthesizes MP3 audio via Edge TTS (`edge-tts` package). `TimelineGenerator` produces timed event sequences that sync narration audio with demo code execution.
 
 ## Configuration
 
