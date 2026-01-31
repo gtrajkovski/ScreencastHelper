@@ -168,11 +168,12 @@ class Config:
 
     # Script structure
     SCRIPT_STRUCTURE = {
-        "hook": {"duration_pct": 0.10, "description": "Relatable problem or question"},
-        "objective": {"duration_pct": 0.10, "description": "By the end of this video..."},
-        "content": {"duration_pct": 0.60, "description": "Core teaching content"},
-        "summary": {"duration_pct": 0.10, "description": "Key takeaways"},
-        "cta": {"duration_pct": 0.10, "description": "Call to action for next activity"}
+        "hook": {"duration_pct": 0.08, "description": "Relatable problem or scenario (30-60s)"},
+        "objective": {"duration_pct": 0.08, "description": "By the end of this video... (Bloom's verbs)"},
+        "content": {"duration_pct": 0.52, "description": "Core teaching content (3-4 subsections)"},
+        "ivq": {"duration_pct": 0.10, "description": "In-Video Question (4-option MCQ with feedback)"},
+        "summary": {"duration_pct": 0.08, "description": "Key takeaways reinforcing objectives"},
+        "cta": {"duration_pct": 0.06, "description": "Direct to next activity"}
     }
 
     @classmethod

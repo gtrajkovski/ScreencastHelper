@@ -95,15 +95,18 @@ def parse_script_to_segments(script: str, duration_minutes: int = 5) -> list:
     segment_id = 0
 
     section_proportions = {
-        'HOOK': 0.10, 'OBJECTIVE': 0.10, 'CONTENT': 0.60,
-        'SUMMARY': 0.10, 'CTA': 0.10, 'CALL TO ACTION': 0.10
+        'HOOK': 0.08, 'OBJECTIVE': 0.08, 'CONTENT': 0.52,
+        'IVQ': 0.10, 'SUMMARY': 0.08, 'CTA': 0.06, 'CALL TO ACTION': 0.06
     }
     total_seconds = duration_minutes * 60
 
+    # Strip metadata table if present (not a script section)
+    script = re.sub(r'^\s*\|[^\n]*\|\n(?:\|[-:| ]+\|\n)?(?:\|[^\n]*\|\n)*', '', script).strip()
+
     section_pattern = (
-        r'##\s*(\d+\.\s*)?(HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION|CTA)'
+        r'##\s*(\d+\.\s*)?(HOOK|OBJECTIVE|CONTENT|IVQ|SUMMARY|CALL TO ACTION|CTA)'
         r'([^\n]*)\n([\s\S]*?)(?=##\s*\d*\.?\s*'
-        r'(?:HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION|CTA)|$)'
+        r'(?:HOOK|OBJECTIVE|CONTENT|IVQ|SUMMARY|CALL TO ACTION|CTA)|$)'
     )
     matches = re.findall(section_pattern, script, re.IGNORECASE)
 
@@ -136,9 +139,19 @@ def parse_script_to_segments(script: str, duration_minutes: int = 5) -> list:
         narration = re.sub(r'#{1,3}\s+', '', narration)
         narration = re.sub(r'\[(?!PAUSE)[^\]]*\]', '', narration)
         narration = re.sub(r'```(?:python)?\n[\s\S]*?```', '', narration)
+        narration = re.sub(r'---\s*CELL BREAK\s*---', '', narration)
+        narration = re.sub(r'\b(NARRATION|OUTPUT|RUN CELL|TYPE|SHOW):', '', narration)
         narration = re.sub(r'\n{3,}', '\n\n', narration).strip()
 
         code_blocks = re.findall(r'```(?:python)?\n([\s\S]*?)```', content)
+
+        # Extract OUTPUT blocks paired with code blocks
+        output_blocks = []
+        for m in re.finditer(r'```(?:python)?\n[\s\S]*?```\s*(?:\*\*OUTPUT:\*\*\s*)?```\n?([\s\S]*?)```', content):
+            output_blocks.append(m.group(1).strip())
+        # Fallback: also match OUTPUT: blocks without code fences
+        if not output_blocks:
+            output_blocks = re.findall(r'\*\*OUTPUT:\*\*\s*```\n?([\s\S]*?)```', content)
 
         seg_id_str = f'seg_{segment_id:03d}'
 
@@ -170,11 +183,12 @@ def parse_script_to_segments(script: str, duration_minutes: int = 5) -> list:
 
             cells = []
             for i, block in enumerate(code_blocks):
+                cell_output = output_blocks[i] if i < len(output_blocks) else None
                 cells.append({
                     'id': f'cell_{i + 1}',
                     'type': 'code',
                     'content': block.strip(),
-                    'output': None,
+                    'output': cell_output,
                     'execution_count': i + 1
                 })
 
@@ -198,11 +212,12 @@ def parse_script_to_segments(script: str, duration_minutes: int = 5) -> list:
                 sentences = [s.strip() for s in re.split(r'[.!?]\s+', narration) if len(s.strip()) > 15]
                 bullets = sentences[:5]
 
+            default_title = 'In-Video Question' if section_type == 'IVQ' else section_type
             segments.append({
                 'id': seg_id_str,
                 'type': 'slide',
                 'section': section_type,
-                'title': subtitle or section_type,
+                'title': subtitle or default_title,
                 'narration': narration,
                 'visual_cues': visual_cues,
                 'duration_seconds': duration,
@@ -351,7 +366,11 @@ def generate_script():
         audience=data.get('audience', 'intermediate'),
         learning_objectives=data.get('learning_objectives'),
         sample_code=data.get('sample_code'),
-        notes=data.get('notes')
+        notes=data.get('notes'),
+        course_name=data.get('course_name'),
+        lesson_number=data.get('lesson_number'),
+        video_number=data.get('video_number'),
+        format_type=data.get('format_type')
     )
 
     if result['success']:

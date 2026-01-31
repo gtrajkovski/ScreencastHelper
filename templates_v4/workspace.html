@@ -167,6 +167,7 @@
 
     .segment-item .seg-type.screencast { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
     .segment-item .seg-type.slide { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
+    .segment-item .seg-type.ivq { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
 
     .segment-item .seg-title {
         font-size: 13px;
@@ -193,7 +194,7 @@
             <button class="btn btn-sm" id="btn-save" onclick="saveScript()">Save</button>
             <button class="btn btn-sm btn-primary" id="btn-parse" onclick="parseScript()">Parse Segments</button>
         </div>
-        <textarea id="script-editor" placeholder="Write or generate your WWHAA script here...&#10;&#10;## HOOK&#10;...&#10;## OBJECTIVE&#10;...&#10;## CONTENT&#10;...&#10;## SUMMARY&#10;...&#10;## CTA&#10;...">{{ project.script_raw or '' }}</textarea>
+        <textarea id="script-editor" placeholder="Write or generate your WWHAA+IVQ script here...&#10;&#10;## HOOK&#10;...&#10;## OBJECTIVE&#10;...&#10;## CONTENT&#10;...&#10;## IVQ&#10;...&#10;## SUMMARY&#10;...&#10;## CTA&#10;...">{{ project.script_raw or '' }}</textarea>
         <div class="editor-status">
             <span id="word-count">0 words</span>
             <span id="save-status">Saved</span>
@@ -283,6 +284,33 @@
                         <textarea id="gen-notes" rows="2"
                             placeholder="Any specific requirements, examples to include, or things to avoid..."
                         ></textarea>
+                    </div>
+
+                    <!-- Coursera Metadata (optional) -->
+                    <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">Coursera Metadata <span class="optional">(optional)</span></label>
+                    </div>
+                    <div class="form-group">
+                        <label>Course Name <span class="optional">(optional)</span></label>
+                        <input type="text" id="gen-course-name" placeholder="e.g. Python for Data Science" />
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Lesson #</label>
+                            <input type="number" id="gen-lesson-num" min="1" placeholder="1" />
+                        </div>
+                        <div class="form-group">
+                            <label>Video #</label>
+                            <input type="number" id="gen-video-num" min="1" placeholder="1" />
+                        </div>
+                        <div class="form-group">
+                            <label>Format</label>
+                            <select id="gen-format-type">
+                                <option value="screencast" selected>Screencast</option>
+                                <option value="slide">Slide-based</option>
+                                <option value="mixed">Mixed</option>
+                            </select>
+                        </div>
                     </div>
 
                     <button type="submit" class="btn btn-primary" style="width: 100%;" id="btn-ai-generate">
@@ -400,7 +428,11 @@ async function generateScript(e) {
         audience: document.getElementById('gen-audience').value,
         learning_objectives: document.getElementById('gen-objectives').value.trim() || null,
         sample_code: document.getElementById('gen-sample').value.trim() || null,
-        notes: document.getElementById('gen-notes').value.trim() || null
+        notes: document.getElementById('gen-notes').value.trim() || null,
+        course_name: document.getElementById('gen-course-name').value.trim() || null,
+        lesson_number: parseInt(document.getElementById('gen-lesson-num').value) || null,
+        video_number: parseInt(document.getElementById('gen-video-num').value) || null,
+        format_type: document.getElementById('gen-format-type').value
     };
 
     try {
@@ -454,7 +486,7 @@ function renderSegments(segments) {
 
     list.innerHTML = segments.map(s => `
         <div class="segment-item">
-            <span class="seg-type ${s.type}">${s.type}</span>
+            <span class="seg-type ${s.section === 'IVQ' ? 'ivq' : s.type}">${s.section === 'IVQ' ? 'IVQ' : s.type}</span>
             <span class="seg-title">${s.section}: ${s.title}</span>
             <span class="seg-duration">${s.duration_seconds}s</span>
         </div>
