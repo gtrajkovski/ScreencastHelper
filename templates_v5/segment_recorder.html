@@ -1,0 +1,426 @@
+{% extends "base.html" %}
+{% block title %}Segment Recorder - {{ project.name }}{% endblock %}
+
+{% block nav_items %}
+<a href="/dashboard" class="nav-link">Dashboard</a>
+<a href="/workspace/{{ project.id }}" class="nav-link">Workspace</a>
+<a href="/player/{{ project.id }}" class="nav-link">Player</a>
+<a href="/recorder/{{ project.id }}" class="nav-link active">Recorder</a>
+{% endblock %}
+
+{% block head %}
+<style>
+    .recorder-layout { display: flex; height: calc(100vh - 52px); overflow: hidden; }
+
+    /* Left panel — teleprompter */
+    .teleprompter-panel {
+        width: 400px;
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border-color);
+        display: flex; flex-direction: column; flex-shrink: 0;
+    }
+    .teleprompter-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        font-weight: 600; font-size: 15px;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .segment-list { flex: 1; overflow-y: auto; }
+    .seg-item {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .seg-item:hover { background: var(--bg-card); }
+    .seg-item.active { background: rgba(59, 130, 246, 0.1); border-left: 3px solid var(--accent); }
+    .seg-item.recorded { border-left: 3px solid var(--accent-success); }
+    .seg-item .seg-section { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent); }
+    .seg-item .seg-title { font-size: 13px; font-weight: 600; margin-top: 2px; }
+    .seg-item .seg-status { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    /* Center — recording area */
+    .recorder-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .recorder-view {
+        flex: 1; display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        padding: 24px; overflow-y: auto; background: var(--bg-primary);
+    }
+
+    .teleprompter-text {
+        max-width: 700px; width: 100%;
+        font-size: 20px; line-height: 1.8;
+        color: var(--text-primary);
+        padding: 24px; border-radius: 12px;
+        background: var(--bg-card);
+    }
+    .teleprompter-text .tp-visual-cue {
+        background: rgba(245, 158, 11, 0.1); color: var(--accent-warning);
+        padding: 8px 12px; border-radius: 6px;
+        font-size: 14px; font-family: monospace; margin-bottom: 12px;
+    }
+    .teleprompter-text .tp-code {
+        background: #1e1e1e; border-radius: 8px; padding: 16px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px; line-height: 1.5;
+        overflow-x: auto; white-space: pre; margin: 12px 0;
+    }
+
+    .recorder-controls {
+        padding: 16px 24px;
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border-color);
+        display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    }
+    .rec-btn {
+        width: 52px; height: 52px; border-radius: 50%; border: 3px solid #ef4444;
+        background: transparent; cursor: pointer; position: relative;
+        display: flex; align-items: center; justify-content: center;
+        transition: all 0.2s;
+    }
+    .rec-btn .rec-dot { width: 22px; height: 22px; border-radius: 50%; background: #ef4444; transition: all 0.2s; }
+    .rec-btn.recording .rec-dot { width: 16px; height: 16px; border-radius: 3px; }
+    .rec-btn:hover { transform: scale(1.05); }
+
+    .rec-timer { font-family: 'JetBrains Mono', monospace; font-size: 18px; min-width: 80px; }
+    .rec-actions { display: flex; gap: 8px; margin-left: auto; }
+
+    .playback-area { margin-top: 12px; }
+    .playback-area video { max-width: 500px; border-radius: 8px; }
+
+    /* Right panel — preview */
+    .preview-panel {
+        width: 320px; background: var(--bg-secondary);
+        border-left: 1px solid var(--border-color);
+        display: flex; flex-direction: column; flex-shrink: 0;
+    }
+    .preview-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        font-weight: 600; font-size: 15px;
+    }
+    .preview-content { flex: 1; overflow-y: auto; padding: 16px; }
+    .preview-video { width: 100%; border-radius: 8px; margin-bottom: 12px; }
+    .recording-info { font-size: 12px; color: var(--text-muted); }
+    .recording-info p { margin: 4px 0; }
+
+    .ffmpeg-status {
+        padding: 8px 12px; margin: 8px 16px; border-radius: 6px;
+        font-size: 12px;
+    }
+    .ffmpeg-status.available { background: rgba(34, 197, 94, 0.1); color: var(--accent-success); }
+    .ffmpeg-status.unavailable { background: rgba(239, 68, 68, 0.1); color: var(--accent-danger); }
+
+    .keyboard-shortcuts {
+        padding: 12px 16px; border-top: 1px solid var(--border-color);
+        font-size: 11px; color: var(--text-muted);
+    }
+    .keyboard-shortcuts kbd {
+        background: var(--bg-card); padding: 2px 6px;
+        border-radius: 3px; font-family: monospace;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="recorder-layout">
+    <!-- Left: Segment list -->
+    <div class="teleprompter-panel">
+        <div class="teleprompter-header">
+            <span>Segments</span>
+            <span id="progress-label" style="font-size: 12px; color: var(--text-muted);">0/0 recorded</span>
+        </div>
+        <div class="segment-list" id="segment-list">
+            <div style="padding: 20px; color: var(--text-muted); text-align: center;">Loading...</div>
+        </div>
+    </div>
+
+    <!-- Center: Teleprompter + recording -->
+    <div class="recorder-main">
+        <div class="recorder-view" id="recorder-view">
+            <div class="teleprompter-text" id="teleprompter">
+                <div style="text-align: center; color: var(--text-muted);">
+                    Select a segment to begin recording
+                </div>
+            </div>
+            <div class="playback-area" id="playback-area" style="display: none;">
+                <video id="playback-video" controls style="max-width: 100%; border-radius: 8px;"></video>
+            </div>
+        </div>
+
+        <div class="recorder-controls">
+            <button class="rec-btn" id="rec-btn" onclick="toggleRecording()" title="Record / Stop (Space)">
+                <div class="rec-dot"></div>
+            </button>
+            <div class="rec-timer" id="rec-timer">0:00</div>
+            <div class="rec-actions">
+                <button class="btn" id="btn-play-rec" onclick="playRecording()" disabled>Play</button>
+                <button class="btn" id="btn-rerecord" onclick="reRecord()" disabled>Re-record</button>
+                <button class="btn btn-success" id="btn-accept" onclick="acceptRecording()" disabled>Accept</button>
+                <button class="btn btn-primary" id="btn-next" onclick="nextSegment()" disabled>Next &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Preview -->
+    <div class="preview-panel">
+        <div class="preview-header">Recording Info</div>
+        <div id="ffmpeg-status" class="ffmpeg-status unavailable">Checking FFmpeg...</div>
+        <div class="preview-content" id="preview-content">
+            <div class="recording-info">
+                <p><strong>Segment:</strong> <span id="info-segment">—</span></p>
+                <p><strong>Duration:</strong> <span id="info-duration">—</span></p>
+                <p><strong>Status:</strong> <span id="info-status">Not recorded</span></p>
+            </div>
+        </div>
+        <div class="keyboard-shortcuts">
+            <p><kbd>Space</kbd> Record / Stop</p>
+            <p><kbd>R</kbd> Re-record</p>
+            <p><kbd>Enter</kbd> Accept</p>
+            <p><kbd>&larr;</kbd> <kbd>&rarr;</kbd> Prev / Next segment</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PROJECT_ID = '{{ project.id }}';
+let segments = [];
+let currentIdx = -1;
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordedBlob = null;
+let isRecording = false;
+let timerInterval = null;
+let timerSeconds = 0;
+let stream = null;
+
+function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+}
+
+async function init() {
+    // Load segments
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/timeline`);
+        segments = data.segments || [];
+        renderSegmentList();
+        if (segments.length > 0) selectSegment(0);
+    } catch (err) {
+        showToast('Failed to load segments: ' + err.message, 'error');
+    }
+
+    // Check FFmpeg
+    try {
+        const status = await api('/api/system/ffmpeg-status');
+        const el = document.getElementById('ffmpeg-status');
+        if (status.available) {
+            el.className = 'ffmpeg-status available';
+            el.textContent = 'FFmpeg available — ' + (status.version || '').substring(0, 40);
+        } else {
+            el.className = 'ffmpeg-status unavailable';
+            el.textContent = 'FFmpeg not found — browser recording only';
+        }
+    } catch {
+        document.getElementById('ffmpeg-status').textContent = 'FFmpeg status unknown';
+    }
+}
+
+function renderSegmentList() {
+    const container = document.getElementById('segment-list');
+    container.innerHTML = segments.map((s, i) => `
+        <div class="seg-item${i === currentIdx ? ' active' : ''}" data-idx="${i}" onclick="selectSegment(${i})">
+            <div class="seg-section">${escapeHtml(s.section)}</div>
+            <div class="seg-title">${escapeHtml(s.title)}</div>
+            <div class="seg-status" id="seg-status-${i}">Not recorded</div>
+        </div>
+    `).join('');
+    updateProgressLabel();
+}
+
+function updateProgressLabel() {
+    const recorded = document.querySelectorAll('.seg-item.recorded').length;
+    document.getElementById('progress-label').textContent = `${recorded}/${segments.length} recorded`;
+}
+
+function selectSegment(idx) {
+    if (isRecording) return;
+    currentIdx = idx;
+    const seg = segments[idx];
+
+    // Highlight in list
+    document.querySelectorAll('.seg-item').forEach(el => el.classList.remove('active'));
+    const el = document.querySelector(`.seg-item[data-idx="${idx}"]`);
+    if (el) { el.classList.add('active'); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+
+    // Render teleprompter
+    let html = '';
+    if (seg.visual_cue) html += `<div class="tp-visual-cue">[SCREEN: ${escapeHtml(seg.visual_cue)}]</div>`;
+    html += `<div>${escapeHtml(seg.narration || '').replace(/\n/g, '<br>')}</div>`;
+    if (seg.code) html += `<div class="tp-code">${escapeHtml(seg.code)}</div>`;
+    document.getElementById('teleprompter').innerHTML = html;
+
+    // Update info
+    document.getElementById('info-segment').textContent = `${seg.section} — ${seg.title}`;
+    document.getElementById('info-duration').textContent = `${Math.round(seg.duration)}s estimated`;
+
+    // Reset playback
+    document.getElementById('playback-area').style.display = 'none';
+    recordedBlob = null;
+    updateButtons();
+}
+
+function updateButtons() {
+    const hasRecording = !!recordedBlob;
+    document.getElementById('btn-play-rec').disabled = !hasRecording;
+    document.getElementById('btn-rerecord').disabled = isRecording;
+    document.getElementById('btn-accept').disabled = !hasRecording || isRecording;
+    document.getElementById('btn-next').disabled = currentIdx >= segments.length - 1;
+}
+
+async function toggleRecording() {
+    if (isRecording) {
+        stopRecording();
+    } else {
+        await startRecording();
+    }
+}
+
+async function startRecording() {
+    if (currentIdx < 0) return;
+
+    try {
+        // Request screen + audio
+        stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { width: 1920, height: 1080, frameRate: 30 },
+            audio: true
+        });
+
+        // Optionally add microphone
+        try {
+            const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            for (const track of micStream.getAudioTracks()) {
+                stream.addTrack(track);
+            }
+        } catch {
+            // Mic optional
+        }
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+
+        mediaRecorder.ondataavailable = e => {
+            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            recordedBlob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(recordedBlob);
+            const video = document.getElementById('playback-video');
+            video.src = url;
+            document.getElementById('playback-area').style.display = 'block';
+            document.getElementById('info-status').textContent = `Recorded (${formatTime(timerSeconds)})`;
+            updateButtons();
+        };
+
+        mediaRecorder.start(1000);
+        isRecording = true;
+        timerSeconds = 0;
+        document.getElementById('rec-btn').classList.add('recording');
+        document.getElementById('rec-timer').textContent = '0:00';
+        timerInterval = setInterval(() => {
+            timerSeconds++;
+            document.getElementById('rec-timer').textContent = formatTime(timerSeconds);
+        }, 1000);
+        updateButtons();
+
+    } catch (err) {
+        showToast('Could not start recording: ' + err.message, 'error');
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+    }
+    isRecording = false;
+    clearInterval(timerInterval);
+    document.getElementById('rec-btn').classList.remove('recording');
+}
+
+function playRecording() {
+    const video = document.getElementById('playback-video');
+    if (video.src) {
+        document.getElementById('playback-area').style.display = 'block';
+        video.play();
+    }
+}
+
+function reRecord() {
+    recordedBlob = null;
+    recordedChunks = [];
+    document.getElementById('playback-area').style.display = 'none';
+    document.getElementById('info-status').textContent = 'Not recorded';
+    updateButtons();
+}
+
+async function acceptRecording() {
+    if (!recordedBlob || currentIdx < 0) return;
+
+    const seg = segments[currentIdx];
+    const formData = new FormData();
+    formData.append('project_id', PROJECT_ID);
+    formData.append('segment_id', seg.id);
+    formData.append('video', recordedBlob, `${seg.id}.webm`);
+
+    try {
+        const resp = await fetch('/api/recordings/upload', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Upload failed');
+
+        showToast('Recording saved');
+        document.getElementById('info-status').textContent = 'Accepted';
+
+        // Mark in list
+        const el = document.querySelector(`.seg-item[data-idx="${currentIdx}"]`);
+        if (el) el.classList.add('recorded');
+        const statusEl = document.getElementById(`seg-status-${currentIdx}`);
+        if (statusEl) statusEl.textContent = `Recorded (${formatTime(timerSeconds)})`;
+        updateProgressLabel();
+
+    } catch (err) {
+        showToast('Upload failed: ' + err.message, 'error');
+    }
+}
+
+function nextSegment() {
+    if (currentIdx < segments.length - 1) selectSegment(currentIdx + 1);
+}
+
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.code === 'Space') { e.preventDefault(); toggleRecording(); }
+    else if (e.code === 'KeyR' && !isRecording) { reRecord(); }
+    else if (e.code === 'Enter' && recordedBlob && !isRecording) { acceptRecording(); }
+    else if (e.code === 'ArrowRight') { nextSegment(); }
+    else if (e.code === 'ArrowLeft' && currentIdx > 0) { selectSegment(currentIdx - 1); }
+});
+
+init();
+</script>
+{% endblock %}

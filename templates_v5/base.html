@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ScreenCast Studio v5.0{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/dashboard" class="navbar-brand">
+            <span>&#9654;</span> ScreenCast Studio <small style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">v5.0</small>
+        </a>
+        <div class="navbar-nav">
+            {% block nav_items %}
+            <a href="/dashboard" class="nav-link {% block nav_dashboard %}{% endblock %}">Dashboard</a>
+            {% endblock %}
+        </div>
+    </nav>
+
+    {% block content %}{% endblock %}
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    async function api(url, options = {}) {
+        const resp = await fetch(url, {
+            headers: { 'Content-Type': 'application/json', ...options.headers },
+            ...options
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Request failed');
+        return data;
+    }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

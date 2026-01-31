@@ -78,6 +78,7 @@
         display: flex;
         flex-direction: column;
         min-width: 0;
+        position: relative;
     }
 
     #script-editor {
@@ -402,6 +403,143 @@
         flex-shrink: 0;
     }
     .ai-helper-status.hidden { display: none; }
+
+    /* ===== Feature 1: Text Selection AI Edit ===== */
+    .ai-edit-btn {
+        position: absolute;
+        display: none;
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 4px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        z-index: 50;
+        box-shadow: 0 2px 12px rgba(59, 130, 246, 0.4);
+        white-space: nowrap;
+    }
+    .ai-edit-btn:hover { filter: brightness(1.15); }
+
+    .sel-edit-selected {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        max-height: 120px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin-bottom: 12px;
+        color: var(--text-secondary);
+    }
+    .sel-edit-actions {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+    .sel-edit-actions button {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 6px 4px;
+        font-size: 11px;
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: border-color 0.15s;
+    }
+    .sel-edit-actions button:hover { border-color: var(--accent); }
+
+    .sel-edit-preview {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        max-height: 200px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        margin-top: 12px;
+        display: none;
+    }
+    .sel-edit-preview.has-content { display: block; }
+    .sel-edit-result-actions {
+        display: none;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .sel-edit-result-actions.visible { display: flex; }
+
+    /* ===== Feature 2: Quality Checks ===== */
+    .qc-check-list { display: flex; flex-direction: column; gap: 4px; }
+    .qc-check-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        background: var(--bg-card);
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .qc-check-item:hover { background: var(--bg-input, var(--bg-card)); }
+    .qc-icon {
+        width: 20px; height: 20px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .qc-icon.pending { background: rgba(107, 114, 128, 0.2); color: var(--text-muted); }
+    .qc-icon.pass { background: rgba(16, 185, 129, 0.2); color: var(--accent-success); }
+    .qc-icon.warn { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); }
+    .qc-icon.fail { background: rgba(239, 68, 68, 0.2); color: var(--accent-danger); }
+    .qc-name { flex: 1; }
+    .qc-score-badge { font-size: 11px; color: var(--text-muted); }
+    .qc-details {
+        font-size: 12px; color: var(--text-secondary);
+        padding: 6px 10px 10px 38px;
+        display: none; line-height: 1.6;
+    }
+    .qc-check-item.expanded + .qc-details { display: block; }
+    .qc-overall {
+        display: flex; align-items: center; justify-content: center;
+        gap: 8px; padding: 10px; background: var(--bg-card);
+        border-radius: var(--radius); margin-bottom: 10px; font-size: 14px; font-weight: 600;
+    }
+    .qc-overall-val { font-size: 22px; }
+    .qc-overall-val.good { color: var(--accent-success); }
+    .qc-overall-val.ok { color: var(--accent-warning); }
+    .qc-overall-val.bad { color: var(--accent-danger); }
+
+    /* ===== Feature 3: Export ===== */
+    .export-path-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .export-path-row input[type="text"] { flex: 1; }
+    .export-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .export-option { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+    .export-option input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .export-btns { display: flex; gap: 8px; }
+    .export-btns .btn { flex: 1; }
+    .folder-list {
+        max-height: 280px; overflow-y: auto;
+        border: 1px solid var(--border-color); border-radius: 6px; margin: 10px 0;
+    }
+    .folder-item {
+        padding: 8px 12px; cursor: pointer; font-size: 13px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex; align-items: center; gap: 6px;
+    }
+    .folder-item:last-child { border-bottom: none; }
+    .folder-item:hover { background: var(--bg-card); }
+    .folder-path-current {
+        font-size: 12px; color: var(--text-muted);
+        word-break: break-all; margin-bottom: 8px;
+        font-family: 'JetBrains Mono', monospace;
+    }
 </style>
 {% endblock %}
 
@@ -425,6 +563,7 @@
             <!-- Raw editor -->
             <div class="raw-pane">
                 <textarea id="script-editor" placeholder="Write or generate your WWHAA+IVQ script here...&#10;&#10;## HOOK&#10;...&#10;## OBJECTIVE&#10;...&#10;## CONTENT&#10;...&#10;## IVQ&#10;...&#10;## SUMMARY&#10;...&#10;## CTA&#10;...">{{ project.script_raw or '' }}</textarea>
+                <button class="ai-edit-btn" id="ai-edit-btn" onclick="openSelectionEditModal()">AI Edit</button>
             </div>
             <!-- Rendered preview -->
             <div class="preview-pane">
@@ -558,6 +697,25 @@
             </div>
         </div>
 
+        <!-- Quality Checks -->
+        <div class="panel-section" id="qc-section">
+            <div class="panel-header" onclick="toggleSection('qc-section')">
+                <h3>Quality Checks</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <div class="qc-overall" id="qc-overall">
+                    <span>Score:</span>
+                    <span class="qc-overall-val" id="qc-overall-val">--</span>
+                    <span style="color: var(--text-muted);">/ 100</span>
+                </div>
+                <button class="btn btn-primary btn-sm" style="width: 100%; margin-bottom: 10px;" onclick="runAllQualityChecks()">
+                    Run All Checks
+                </button>
+                <div class="qc-check-list" id="qc-check-list"></div>
+            </div>
+        </div>
+
         <!-- Audio -->
         <div class="panel-section">
             <h3>Audio</h3>
@@ -575,6 +733,32 @@
                 Generate All Audio
             </button>
             <div id="audio-status" style="margin-top: 8px; font-size: 12px; color: var(--text-muted);"></div>
+        </div>
+
+        <!-- Export -->
+        <div class="panel-section" id="export-section">
+            <div class="panel-header" onclick="toggleSection('export-section')">
+                <h3>Export</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <label style="font-size: 12px;">Output Folder</label>
+                <div class="export-path-row">
+                    <input type="text" id="export-folder" placeholder="C:\output\my-screencast" />
+                    <button class="btn btn-sm" onclick="openFolderBrowser()">Browse</button>
+                </div>
+                <div class="export-options">
+                    <label class="export-option"><input type="checkbox" id="exp-script" checked /> Script (.md)</label>
+                    <label class="export-option"><input type="checkbox" id="exp-audio" /> Audio (.mp3)</label>
+                    <label class="export-option"><input type="checkbox" id="exp-code" /> Code Cells (.py)</label>
+                    <label class="export-option"><input type="checkbox" id="exp-notebook" /> Notebook (.ipynb)</label>
+                </div>
+                <div class="export-btns">
+                    <button class="btn btn-primary" onclick="exportToFolder()">Export to Folder</button>
+                    <button class="btn btn-success" onclick="exportAsZip()">Download ZIP</button>
+                </div>
+                <div id="export-status" style="margin-top: 8px; font-size: 12px; color: var(--text-muted);"></div>
+            </div>
         </div>
 
         <!-- Player Link -->
@@ -641,6 +825,64 @@
     <div class="ai-helper-status hidden" id="ai-helper-status">
         <div class="spinner"></div>
         <span>Applying fix...</span>
+    </div>
+</div>
+
+<!-- Selection AI Edit Modal -->
+<div class="modal-backdrop" id="sel-edit-modal">
+    <div class="modal" style="max-width: 620px;" onclick="event.stopPropagation()">
+        <h2>AI Edit Selection</h2>
+        <label style="font-size: 12px; color: var(--text-muted);">Selected Text:</label>
+        <div class="sel-edit-selected" id="sel-edit-selected-text"></div>
+
+        <label style="font-size: 12px; color: var(--text-muted);">Quick Actions:</label>
+        <div class="sel-edit-actions">
+            <button onclick="selEditAction('improve')">Improve</button>
+            <button onclick="selEditAction('shorten')">Shorten</button>
+            <button onclick="selEditAction('expand')">Expand</button>
+            <button onclick="selEditAction('rewrite')">Rewrite</button>
+            <button onclick="selEditAction('fix_grammar')">Fix Grammar</button>
+            <button onclick="selEditAction('simplify')">Simplify</button>
+            <button onclick="selEditAction('fix_code')">Fix Code</button>
+            <button onclick="selEditAction('add_comments')">Comments</button>
+            <button onclick="selEditAction('add_output')">Add Output</button>
+            <button onclick="selEditAction('optimize')">Optimize</button>
+        </div>
+
+        <label style="font-size: 12px; color: var(--text-muted);">Custom Instruction:</label>
+        <div style="display: flex; gap: 8px; margin-bottom: 4px;">
+            <textarea id="sel-edit-custom" rows="2" style="flex: 1; min-height: 40px;"
+                placeholder="Describe what you want to change..."></textarea>
+            <button class="btn btn-primary btn-sm" onclick="selEditAction('custom')" style="flex-shrink: 0;">Apply</button>
+        </div>
+
+        <div class="sel-edit-preview" id="sel-edit-preview"></div>
+        <div class="sel-edit-result-actions" id="sel-edit-result-actions">
+            <button class="btn btn-success" onclick="acceptSelEdit()">Accept</button>
+            <button class="btn btn-danger" onclick="rejectSelEdit()">Reject</button>
+            <button class="btn" onclick="retrySelEdit()">Retry</button>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn" onclick="closeSelEditModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Folder Browser Modal -->
+<div class="modal-backdrop" id="folder-browser-modal">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h2>Select Folder</h2>
+        <div class="folder-path-current" id="folder-browser-current">Loading...</div>
+        <div class="folder-list" id="folder-browser-list"></div>
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <input type="text" id="new-folder-name" placeholder="New folder name" style="flex: 1;" />
+            <button class="btn btn-sm" onclick="createNewFolder()">Create</button>
+        </div>
+        <div class="modal-actions">
+            <button class="btn" onclick="closeFolderBrowser()">Cancel</button>
+            <button class="btn btn-primary" onclick="selectCurrentFolder()">Select This Folder</button>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -1008,10 +1250,401 @@ document.addEventListener('keydown', e => {
     }
     if (e.key === 'Escape') {
         closeAIHelper();
+        closeSelEditModal();
+        closeFolderBrowser();
     }
+});
+
+// Close modals on backdrop click
+document.querySelectorAll('.modal-backdrop').forEach(el => {
+    el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
 });
 
 // Initial preview render
 setTimeout(renderPreview, 100);
+
+// =====================================================================
+// FEATURE 1: Text Selection AI Editing
+// =====================================================================
+
+let selEditState = { start: 0, end: 0, selectedText: '', editedText: '', lastAction: '' };
+
+editor.addEventListener('mouseup', showAIEditButton);
+editor.addEventListener('keyup', function(e) { if (e.shiftKey) showAIEditButton(); });
+
+function showAIEditButton() {
+    const btn = document.getElementById('ai-edit-btn');
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    if (start === end) { btn.style.display = 'none'; return; }
+
+    // Position based on line count heuristic
+    const textBefore = editor.value.substring(0, start);
+    const lineNum = textBefore.split('\n').length;
+    const lineHeight = 13 * 1.6;
+    const topOffset = (lineNum * lineHeight) - editor.scrollTop + 20;
+    const clamped = Math.max(10, Math.min(topOffset, editor.clientHeight - 30));
+
+    btn.style.display = 'block';
+    btn.style.top = clamped + 'px';
+    btn.style.right = '16px';
+}
+
+function openSelectionEditModal() {
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    if (start === end) { showToast('Select some text first', 'error'); return; }
+
+    selEditState.start = start;
+    selEditState.end = end;
+    selEditState.selectedText = editor.value.substring(start, end);
+    selEditState.editedText = '';
+
+    document.getElementById('sel-edit-selected-text').textContent = selEditState.selectedText;
+    document.getElementById('sel-edit-preview').textContent = '';
+    document.getElementById('sel-edit-preview').classList.remove('has-content');
+    document.getElementById('sel-edit-result-actions').classList.remove('visible');
+    document.getElementById('ai-edit-btn').style.display = 'none';
+
+    document.getElementById('sel-edit-modal').classList.add('active');
+}
+
+function closeSelEditModal() {
+    document.getElementById('sel-edit-modal').classList.remove('active');
+}
+
+async function selEditAction(action) {
+    selEditState.lastAction = action;
+    const customInstruction = action === 'custom'
+        ? document.getElementById('sel-edit-custom').value : '';
+
+    if (action === 'custom' && !customInstruction.trim()) {
+        showToast('Enter a custom instruction', 'error'); return;
+    }
+
+    const preview = document.getElementById('sel-edit-preview');
+    preview.textContent = 'Generating...';
+    preview.classList.add('has-content');
+    document.getElementById('sel-edit-result-actions').classList.remove('visible');
+
+    try {
+        const data = await api('/api/ai/edit-selection', {
+            method: 'POST',
+            body: JSON.stringify({
+                selected_text: selEditState.selectedText,
+                action: action,
+                custom_instruction: customInstruction,
+                full_script: editor.value
+            })
+        });
+        selEditState.editedText = data.edited_text;
+        preview.textContent = data.edited_text;
+        document.getElementById('sel-edit-result-actions').classList.add('visible');
+    } catch (err) {
+        preview.textContent = 'Error: ' + err.message;
+        showToast('AI edit error: ' + err.message, 'error');
+    }
+}
+
+function acceptSelEdit() {
+    if (!selEditState.editedText) return;
+    const before = editor.value.substring(0, selEditState.start);
+    const after = editor.value.substring(selEditState.end);
+    editor.value = before + selEditState.editedText + after;
+    editor.dispatchEvent(new Event('input'));
+    closeSelEditModal();
+    showToast('Edit applied');
+}
+
+function rejectSelEdit() {
+    document.getElementById('sel-edit-preview').textContent = '';
+    document.getElementById('sel-edit-preview').classList.remove('has-content');
+    document.getElementById('sel-edit-result-actions').classList.remove('visible');
+    selEditState.editedText = '';
+}
+
+function retrySelEdit() {
+    if (selEditState.lastAction) selEditAction(selEditState.lastAction);
+}
+
+// =====================================================================
+// FEATURE 2: Quality Checks
+// =====================================================================
+
+const QC_CHECKS = [
+    { id: 'structure', name: 'WWHAA Structure', weight: 20 },
+    { id: 'code', name: 'Code Validation', weight: 15 },
+    { id: 'duration', name: 'Duration Balance', weight: 15 },
+    { id: 'narration', name: 'Narration Quality', weight: 15 },
+    { id: 'visual_cues', name: 'Visual Cues', weight: 10 },
+    { id: 'ivq', name: 'IVQ Quality', weight: 10 },
+    { id: 'coursera', name: 'Coursera Compliance', weight: 15 }
+];
+
+function initQCList() {
+    const list = document.getElementById('qc-check-list');
+    list.innerHTML = QC_CHECKS.map(c => `
+        <div class="qc-check-item" data-check="${c.id}" onclick="toggleQCDetails('${c.id}')">
+            <span class="qc-icon pending" id="qc-icon-${c.id}">\u2014</span>
+            <span class="qc-name">${c.name}</span>
+            <span class="qc-score-badge" id="qc-score-${c.id}"></span>
+        </div>
+        <div class="qc-details" id="qc-details-${c.id}"></div>
+    `).join('');
+}
+initQCList();
+
+function toggleQCDetails(id) {
+    document.querySelector(`.qc-check-item[data-check="${id}"]`).classList.toggle('expanded');
+}
+
+function setQCStatus(id, status, ch, scoreText, details) {
+    const icon = document.getElementById('qc-icon-' + id);
+    icon.className = 'qc-icon ' + status;
+    icon.textContent = ch;
+    document.getElementById('qc-score-' + id).textContent = scoreText || '';
+    if (details !== undefined) document.getElementById('qc-details-' + id).innerHTML = details;
+}
+
+async function runAllQualityChecks() {
+    const script = editor.value.trim();
+    if (!script) { showToast('No script to check', 'error'); return; }
+
+    QC_CHECKS.forEach(c => setQCStatus(c.id, 'pending', '\u2026', ''));
+
+    const results = {};
+    results.structure = checkStructure(script);
+    results.duration = checkDuration(script);
+    results.narration = checkNarration(script);
+    results.visual_cues = checkVisualCues(script);
+    results.ivq = checkIVQ(script);
+    results.coursera = checkCoursera(script);
+
+    for (const [id, r] of Object.entries(results)) {
+        setQCStatus(id, r.status, r.ch, r.score + '%', r.details);
+    }
+
+    // Server-side code validation
+    try {
+        const data = await api('/api/validate-all-code', {
+            method: 'POST',
+            body: JSON.stringify({ script_text: script })
+        });
+        results.code = processCodeValidation(data);
+        setQCStatus('code', results.code.status, results.code.ch, results.code.score + '%', results.code.details);
+    } catch (err) {
+        results.code = { status: 'fail', ch: '!', score: 0, details: 'Error: ' + err.message };
+        setQCStatus('code', 'fail', '!', '0%', 'Error: ' + err.message);
+    }
+
+    // Overall score
+    let totalScore = 0, totalWeight = 0;
+    QC_CHECKS.forEach(c => {
+        if (results[c.id]) { totalScore += results[c.id].score * c.weight; totalWeight += c.weight; }
+    });
+    const overall = totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
+    const el = document.getElementById('qc-overall-val');
+    el.textContent = overall;
+    el.className = 'qc-overall-val ' + (overall >= 75 ? 'good' : overall >= 50 ? 'ok' : 'bad');
+    showToast('Quality checks complete: ' + overall + '/100');
+}
+
+function checkStructure(script) {
+    const required = ['HOOK', 'OBJECTIVE', 'CONTENT', 'SUMMARY'];
+    const found = required.filter(s => new RegExp('##\\s+' + s, 'i').test(script));
+    const hasCTA = /##\s+(CALL TO ACTION|CTA)/i.test(script);
+    const total = found.length + (hasCTA ? 1 : 0);
+    const max = required.length + 1;
+    const score = Math.round((total / max) * 100);
+    const missing = required.filter(s => !found.includes(s));
+    if (!hasCTA) missing.push('CTA');
+    const status = score >= 80 ? 'pass' : score >= 60 ? 'warn' : 'fail';
+    return { status, ch: status === 'pass' ? '\u2713' : '\u2717', score, details: missing.length ? 'Missing: ' + missing.join(', ') : 'All WWHAA sections present.' };
+}
+
+function checkDuration(script) {
+    const words = script.trim().split(/\s+/).filter(w => w).length;
+    const est = words / 150;
+    const target = parseInt(document.getElementById('gen-duration').value) || 5;
+    const ratio = est / target;
+    if (ratio >= 0.8 && ratio <= 1.2) return { status: 'pass', ch: '\u2713', score: 100, details: `~${est.toFixed(1)} min (target ${target}). Good match.` };
+    if (ratio >= 0.6 && ratio <= 1.5) return { status: 'warn', ch: '!', score: 60, details: `~${est.toFixed(1)} min vs ${target} min target. Consider ${ratio < 1 ? 'expanding' : 'trimming'}.` };
+    return { status: 'fail', ch: '\u2717', score: 20, details: `~${est.toFixed(1)} min vs ${target} min target. Significant mismatch.` };
+}
+
+function checkNarration(script) {
+    const issues = [];
+    let score = 100;
+    const paras = script.split(/\n\n+/);
+    const longP = paras.filter(p => p.trim().split(/\s+/).length > 100).length;
+    if (longP > 0) { issues.push(longP + ' paragraph(s) over 100 words.'); score -= 15 * longP; }
+    const pauseCount = (script.match(/\[PAUSE\]/g) || []).length;
+    if (pauseCount < 2) { issues.push('Fewer than 2 [PAUSE] markers.'); score -= 15; }
+    score = Math.max(0, score);
+    const status = score >= 75 ? 'pass' : score >= 50 ? 'warn' : 'fail';
+    return { status, ch: status === 'pass' ? '\u2713' : '!', score, details: issues.length ? issues.join('<br>') : 'Narration quality looks good.' };
+}
+
+function checkVisualCues(script) {
+    const cues = (script.match(/\[SCREEN:\s*[^\]]+\]/g) || []).length;
+    const sections = (script.match(/^##\s+/gm) || []).length;
+    const expected = Math.max(sections, 3);
+    const score = Math.min(100, Math.round((cues / expected) * 100));
+    const status = score >= 70 ? 'pass' : score >= 40 ? 'warn' : 'fail';
+    return { status, ch: status === 'pass' ? '\u2713' : '!', score, details: `${cues} [SCREEN:] cues across ${sections} sections. ${cues < expected ? 'Consider adding more.' : 'Good coverage.'}` };
+}
+
+function checkIVQ(script) {
+    if (!/##\s+IVQ/i.test(script)) return { status: 'fail', ch: '\u2717', score: 0, details: 'No IVQ section found.' };
+    const ivq = script.match(/##\s+IVQ[\s\S]*?(?=##\s+(?:HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION|CTA)|$)/i);
+    if (!ivq) return { status: 'warn', ch: '!', score: 50, details: 'IVQ section found but could not parse.' };
+    const t = ivq[0];
+    const hasOpts = /[A-D]\)/i.test(t);
+    const hasFeedback = /feedback|correct|incorrect/i.test(t);
+    let score = 50;
+    const issues = [];
+    if (hasOpts) score += 25; else issues.push('No A/B/C/D options detected.');
+    if (hasFeedback) score += 25; else issues.push('No feedback text detected.');
+    const status = score >= 75 ? 'pass' : score >= 50 ? 'warn' : 'fail';
+    return { status, ch: status === 'pass' ? '\u2713' : '!', score, details: issues.length ? issues.join('<br>') : 'IVQ looks complete.' };
+}
+
+function checkCoursera(script) {
+    const issues = [];
+    let score = 100;
+    if (!/\|.*Course.*\|/i.test(script)) { issues.push('No metadata table found.'); score -= 20; }
+    const words = script.trim().split(/\s+/).filter(w => w).length;
+    const est = words / 150;
+    if (est < 3 || est > 10) { issues.push(`Duration ~${est.toFixed(1)} min (Coursera: 3-10 min).`); score -= 15; }
+    if (/previous video|next video|last module|in the previous/i.test(script)) { issues.push('Contains sequential references.'); score -= 20; }
+    score = Math.max(0, score);
+    const status = score >= 75 ? 'pass' : score >= 50 ? 'warn' : 'fail';
+    return { status, ch: status === 'pass' ? '\u2713' : '!', score, details: issues.length ? issues.join('<br>') : 'Coursera compliance checks passed.' };
+}
+
+function processCodeValidation(data) {
+    if (data.total_blocks === 0) return { status: 'warn', ch: '!', score: 50, details: 'No Python code blocks found.' };
+    const score = Math.round(((data.total_blocks - data.invalid_count) / data.total_blocks) * 100);
+    const status = score === 100 ? 'pass' : score >= 70 ? 'warn' : 'fail';
+    let details = `${data.total_blocks - data.invalid_count}/${data.total_blocks} code blocks valid.`;
+    if (data.invalid_count > 0) {
+        details += '<br>' + data.results.filter(r => !r.valid).map(r =>
+            `Block ${r.index + 1}: ${r.error}`
+        ).join('<br>');
+    }
+    return { status, ch: status === 'pass' ? '\u2713' : '!', score, details };
+}
+
+// =====================================================================
+// FEATURE 3: Export
+// =====================================================================
+
+let folderBrowserPath = '.';
+
+function getExportOptions() {
+    return {
+        script: document.getElementById('exp-script').checked,
+        audio: document.getElementById('exp-audio').checked,
+        code: document.getElementById('exp-code').checked,
+        notebook: document.getElementById('exp-notebook').checked
+    };
+}
+
+async function exportToFolder() {
+    const folder = document.getElementById('export-folder').value.trim();
+    if (!folder) { showToast('Enter an output folder path', 'error'); return; }
+    const status = document.getElementById('export-status');
+    status.textContent = 'Exporting...';
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/export`, {
+            method: 'POST',
+            body: JSON.stringify({ output_folder: folder, options: getExportOptions() })
+        });
+        status.textContent = `Exported ${data.count} file(s)`;
+        showToast(`Exported ${data.count} files`);
+    } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+        showToast(err.message, 'error');
+    }
+}
+
+async function exportAsZip() {
+    const status = document.getElementById('export-status');
+    status.textContent = 'Preparing ZIP...';
+    try {
+        const resp = await fetch(`/api/projects/${PROJECT_ID}/export-zip`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ options: getExportOptions() })
+        });
+        if (!resp.ok) { const err = await resp.json(); throw new Error(err.error || 'Export failed'); }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const disp = resp.headers.get('Content-Disposition');
+        a.download = disp ? disp.split('filename=')[1] : 'export.zip';
+        a.click();
+        URL.revokeObjectURL(url);
+        status.textContent = 'ZIP downloaded';
+        showToast('ZIP downloaded');
+    } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+        showToast(err.message, 'error');
+    }
+}
+
+async function openFolderBrowser() {
+    folderBrowserPath = document.getElementById('export-folder').value.trim() || '.';
+    document.getElementById('folder-browser-modal').classList.add('active');
+    await loadFolderList(folderBrowserPath);
+}
+
+function closeFolderBrowser() {
+    document.getElementById('folder-browser-modal').classList.remove('active');
+}
+
+async function loadFolderList(path) {
+    try {
+        const data = await api('/api/browse-folders?path=' + encodeURIComponent(path));
+        folderBrowserPath = data.current;
+        document.getElementById('folder-browser-current').textContent = data.current;
+        let html = '';
+        if (data.parent) {
+            html += '<div class="folder-item" onclick="loadFolderList(\'' + data.parent.replace(/\\/g, '\\\\') + '\')">&#128193; ..</div>';
+        }
+        data.folders.forEach(f => {
+            html += '<div class="folder-item" onclick="loadFolderList(\'' + f.path.replace(/\\/g, '\\\\') + '\')">'
+                + '&#128193; ' + f.name + '</div>';
+        });
+        if (!html) html = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No subfolders</div>';
+        document.getElementById('folder-browser-list').innerHTML = html;
+    } catch (err) {
+        showToast('Could not list folders: ' + err.message, 'error');
+    }
+}
+
+function selectCurrentFolder() {
+    document.getElementById('export-folder').value = folderBrowserPath;
+    closeFolderBrowser();
+}
+
+async function createNewFolder() {
+    const name = document.getElementById('new-folder-name').value.trim();
+    if (!name) { showToast('Enter a folder name', 'error'); return; }
+    const sep = folderBrowserPath.includes('/') ? '/' : '\\';
+    const newPath = folderBrowserPath + sep + name;
+    try {
+        await api('/api/create-folder', {
+            method: 'POST',
+            body: JSON.stringify({ path: newPath })
+        });
+        document.getElementById('new-folder-name').value = '';
+        await loadFolderList(folderBrowserPath);
+        showToast('Folder created');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
 </script>
 {% endblock %}

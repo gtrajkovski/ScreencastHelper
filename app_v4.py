@@ -3,10 +3,14 @@
 No desktop dependencies (FFmpeg, tkinter). All recording via browser MediaRecorder API.
 """
 
+import ast
+import io
 import json
 import os
 import re
+import shutil
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -486,6 +490,279 @@ Return ONLY the improved segment in the same format."""
     try:
         improved = ai_client.generate(SEGMENT_IMPROVE_SYSTEM, user_prompt)
         return jsonify({'success': True, 'improved_segment': improved, 'action': action})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# TEXT SELECTION AI EDITING
+# ============================================================================
+
+SELECTION_EDIT_SYSTEM = """You are an expert editor for screencast video scripts. \
+You will receive a selected text fragment and an editing instruction. \
+Return ONLY the improved version of the selected text. \
+Do not add explanations, preamble, or wrap in quotes. Just the replacement text. \
+Preserve any markers like **[RUN CELL]**, **[PAUSE]**, [SCREEN: ...], **NARRATION:**, **OUTPUT:**."""
+
+SELECTION_EDIT_PROMPTS = {
+    'improve': 'Improve the clarity, flow, and engagement of this text.',
+    'shorten': 'Make this text 30-40% shorter while preserving meaning.',
+    'expand': 'Expand this text with more detail and examples. Add 30-50% more content.',
+    'rewrite': 'Completely rewrite this text with the same meaning but different wording.',
+    'fix_grammar': 'Fix all grammar, spelling, and punctuation errors.',
+    'simplify': 'Simplify the language. Use shorter sentences and common words.',
+    'fix_code': 'Fix any code errors (syntax, logic) in this text. Ensure valid Python.',
+    'add_comments': 'Add helpful code comments to the code in this selection.',
+    'add_output': 'Add realistic **OUTPUT:** blocks showing what this code would produce.',
+    'optimize': 'Optimize this code for readability and best practices.',
+}
+
+
+@app.route('/api/ai/edit-selection', methods=['POST'])
+def edit_selection():
+    """Use AI to edit a selected text range."""
+    data = request.json or {}
+    selected_text = data.get('selected_text', '')
+    action = data.get('action', '')
+    custom_instruction = data.get('custom_instruction', '')
+    full_script = data.get('full_script', '')
+
+    if not selected_text:
+        return jsonify({'error': 'selected_text is required'}), 400
+    if not action:
+        return jsonify({'error': 'action is required'}), 400
+
+    instruction = SELECTION_EDIT_PROMPTS.get(action, custom_instruction)
+    if action == 'custom':
+        instruction = custom_instruction
+    if not instruction:
+        return jsonify({'error': 'Unknown action or empty instruction'}), 400
+
+    context_hint = ''
+    if full_script:
+        context_hint = (
+            "\n\nFOR CONTEXT, here is the surrounding script "
+            "(do NOT return this, only return the edited selection):\n---\n"
+            + full_script[:2000] + "\n---\n"
+        )
+
+    user_prompt = f"""{instruction}
+
+SELECTED TEXT TO EDIT:
+---
+{selected_text}
+---
+{context_hint}
+Return ONLY the replacement text."""
+
+    try:
+        result = ai_client.generate(SELECTION_EDIT_SYSTEM, user_prompt)
+        return jsonify({'success': True, 'edited_text': result, 'action': action})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# CODE VALIDATION API
+# ============================================================================
+
+@app.route('/api/validate-all-code', methods=['POST'])
+def validate_all_code():
+    """Validate all Python code blocks in a script using ast.parse()."""
+    data = request.json or {}
+    script_text = data.get('script_text', '')
+
+    if not script_text:
+        return jsonify({'error': 'script_text is required'}), 400
+
+    code_blocks = re.findall(r'```(?:python)?\n([\s\S]*?)```', script_text)
+    results = []
+
+    for i, block in enumerate(code_blocks):
+        block = block.strip()
+        try:
+            ast.parse(block)
+            results.append({'index': i, 'valid': True, 'code_preview': block[:80], 'error': None})
+        except SyntaxError as e:
+            results.append({
+                'index': i, 'valid': False,
+                'code_preview': block[:80],
+                'error': f'Line {e.lineno}: {e.msg}'
+            })
+
+    return jsonify({
+        'success': True,
+        'all_valid': all(r['valid'] for r in results),
+        'total_blocks': len(results),
+        'invalid_count': sum(1 for r in results if not r['valid']),
+        'results': results
+    })
+
+
+# ============================================================================
+# EXPORT API
+# ============================================================================
+
+def extract_code_cells(script_text: str) -> str:
+    """Extract all Python code blocks into a single .py file."""
+    code_blocks = re.findall(r'```(?:python)?\n([\s\S]*?)```', script_text)
+    lines = []
+    for i, block in enumerate(code_blocks):
+        lines.append(f'# --- Cell {i + 1} ---')
+        lines.append(block.strip())
+        lines.append('')
+    return '\n'.join(lines)
+
+
+def create_jupyter_notebook(script_text: str) -> dict:
+    """Convert code blocks from script into a Jupyter notebook dict."""
+    try:
+        import nbformat
+        nb = nbformat.v4.new_notebook()
+        parts = re.split(r'(```(?:python)?\n[\s\S]*?```)', script_text)
+        for part in parts:
+            code_match = re.match(r'```(?:python)?\n([\s\S]*?)```', part)
+            if code_match:
+                nb.cells.append(nbformat.v4.new_code_cell(code_match.group(1).strip()))
+            else:
+                text = part.strip()
+                if text:
+                    text = re.sub(r'\*\*\[(RUN CELL|TYPE|SHOW|PAUSE)\]\*\*', '', text)
+                    text = re.sub(r'\[SCREEN:[^\]]*\]', '', text)
+                    if text.strip():
+                        nb.cells.append(nbformat.v4.new_markdown_cell(text.strip()))
+        return nb
+    except ImportError:
+        return None
+
+
+@app.route('/api/projects/<project_id>/export', methods=['POST'])
+def export_project(project_id):
+    """Export project artifacts to a folder on disk."""
+    project = load_project(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.json or {}
+    output_folder = data.get('output_folder', '')
+    options = data.get('options', {})
+
+    if not output_folder:
+        return jsonify({'error': 'output_folder is required'}), 400
+
+    output_path = Path(output_folder)
+    output_path.mkdir(parents=True, exist_ok=True)
+    exported = []
+    script_raw = project.get('script_raw', '')
+    safe_name = sanitize_filename(project.get('name', 'untitled'))
+
+    if options.get('script', True) and script_raw:
+        script_file = output_path / f'{safe_name}.md'
+        script_file.write_text(script_raw, encoding='utf-8')
+        exported.append(str(script_file))
+
+    if options.get('code', False) and script_raw:
+        code_content = extract_code_cells(script_raw)
+        if code_content.strip():
+            code_file = output_path / f'{safe_name}.py'
+            code_file.write_text(code_content, encoding='utf-8')
+            exported.append(str(code_file))
+
+    if options.get('notebook', False) and script_raw:
+        nb = create_jupyter_notebook(script_raw)
+        if nb:
+            import nbformat
+            nb_file = output_path / f'{safe_name}.ipynb'
+            with open(nb_file, 'w', encoding='utf-8') as f:
+                nbformat.write(nb, f)
+            exported.append(str(nb_file))
+
+    if options.get('audio', False):
+        audio_dir = get_project_dir(project_id) / 'audio'
+        if audio_dir.exists():
+            out_audio = output_path / 'audio'
+            out_audio.mkdir(exist_ok=True)
+            for mp3 in audio_dir.glob('*.mp3'):
+                dest = out_audio / mp3.name
+                shutil.copy2(str(mp3), str(dest))
+                exported.append(str(dest))
+
+    return jsonify({'success': True, 'exported_files': exported, 'count': len(exported)})
+
+
+@app.route('/api/projects/<project_id>/export-zip', methods=['POST'])
+def export_project_zip(project_id):
+    """Export project as downloadable ZIP."""
+    project = load_project(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.json or {}
+    options = data.get('options', {})
+    script_raw = project.get('script_raw', '')
+    safe_name = sanitize_filename(project.get('name', 'untitled'))
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        if options.get('script', True) and script_raw:
+            zf.writestr(f'{safe_name}/{safe_name}.md', script_raw)
+
+        if options.get('code', False) and script_raw:
+            code_content = extract_code_cells(script_raw)
+            if code_content.strip():
+                zf.writestr(f'{safe_name}/{safe_name}.py', code_content)
+
+        if options.get('notebook', False) and script_raw:
+            nb = create_jupyter_notebook(script_raw)
+            if nb:
+                import nbformat
+                zf.writestr(f'{safe_name}/{safe_name}.ipynb', nbformat.writes(nb))
+
+        if options.get('audio', False):
+            audio_dir = get_project_dir(project_id) / 'audio'
+            if audio_dir.exists():
+                for mp3 in audio_dir.glob('*.mp3'):
+                    zf.write(str(mp3), f'{safe_name}/audio/{mp3.name}')
+
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/zip', as_attachment=True,
+                     download_name=f'{safe_name}.zip')
+
+
+@app.route('/api/browse-folders', methods=['GET'])
+def browse_folders():
+    """List subdirectories of a given path for folder browser."""
+    base = request.args.get('path', '.')
+    base_path = Path(base).resolve()
+
+    if not base_path.exists() or not base_path.is_dir():
+        return jsonify({'error': 'Invalid path'}), 400
+
+    folders = []
+    try:
+        for entry in sorted(base_path.iterdir()):
+            if entry.is_dir() and not entry.name.startswith('.'):
+                folders.append({'name': entry.name, 'path': str(entry)})
+    except PermissionError:
+        return jsonify({'error': 'Permission denied'}), 403
+
+    return jsonify({
+        'current': str(base_path),
+        'parent': str(base_path.parent) if base_path.parent != base_path else None,
+        'folders': folders
+    })
+
+
+@app.route('/api/create-folder', methods=['POST'])
+def create_folder():
+    """Create a new folder."""
+    data = request.json or {}
+    folder_path = data.get('path', '')
+    if not folder_path:
+        return jsonify({'error': 'path is required'}), 400
+    try:
+        Path(folder_path).mkdir(parents=True, exist_ok=True)
+        return jsonify({'success': True, 'path': folder_path})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

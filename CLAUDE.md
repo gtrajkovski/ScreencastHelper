@@ -16,8 +16,9 @@ cp .env.example .env             # Then add ANTHROPIC_API_KEY
 
 ### Run the Application
 ```bash
-python app_v3.py              # Web app v3.0 on http://127.0.0.1:5555
-python app_v4.py              # Web app v4.0 (browser-native recording, no FFmpeg)
+python app_v5.py              # Web app v5.0 on http://127.0.0.1:5001 (recommended)
+python app_v3.py              # Web app v3.0 on http://127.0.0.1:5555 (legacy)
+python app_v4.py              # Web app v4.0 (legacy)
 python -m src.ui.cli <command> # CLI mode
 ```
 
@@ -63,13 +64,41 @@ Section parsing regex: `r'## (HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION)\n(.
 
 `src/environments/base.py` defines `BaseEnvironment` (abstract) and `DemoStep` dataclass. Implementations in `jupyter.py` and `terminal.py`. `ENV_RECOMMENDATIONS` in `src/config.py` maps `DemoType` → `Environment`.
 
-### Web App (v3.0 and v4.0)
+### Web App (v5.0 — current)
 
-**v3.0** (`app_v3.py`, ~2000 lines): Flask app with templates in `templates_v3/` and static assets in `static_v3/`. Main frontend logic is in `static_v3/js/workspace.js` (~2000 lines). Screen recording uses FFmpeg with Windows GDI capture (`gdigrab`) — Windows only. `find_ffmpeg()` searches PATH, winget, and common install directories.
+**v5.0** (`app_v5.py`): Unified app consolidating v2 (TUI+data), v3 (Web+TTS), and v4 (Web+Recording). Uses canonical `Project`/`Segment` dataclasses in `src/core/models.py` with `ProjectStore` for disk persistence. Templates in `templates_v5/`, static in `static_v5/`.
 
-**v4.0** (`app_v4.py`): Browser-native recording via MediaRecorder API and Web Audio — no desktop dependencies (FFmpeg, tkinter). Uses `v4_script_generator.py`, `v4_code_generator.py`, `tts_audio_generator.py` (Edge TTS), and `timeline_generator.py`. Templates in `templates_v4/`, static in `static_v4/`.
+Key v5 modules:
+- **`src/core/`**: `models.py` (Project, Segment, SegmentType, SegmentStatus), `project_store.py` (JSON persistence with audio/video/data subdirs), `parser.py` (WWHAA+IVQ script parser)
+- **`src/services/`**: `recording_service.py` (FFmpeg integration)
+- **`app_v5.py`**: Flask app with all API endpoints
 
-Key v3 pages: `/` (dashboard), `/workspace` (editor), `/recording` (3-panel recording), `/present` (presentation mode), `/segment-recorder` (per-segment MP4 recording).
+Key v5 pages: `/dashboard`, `/workspace/<id>` (editor), `/player/<id>` (synchronized playback), `/recorder/<id>` (per-segment recording)
+
+Key v5 API endpoints:
+- `GET/POST /api/projects` — list/create projects
+- `GET/PUT/DELETE /api/projects/<id>` — CRUD
+- `POST /api/projects/<id>/parse` — parse raw script to segments
+- `POST /api/generate/script` — AI script generation
+- `POST /api/ai/improve-segment` — AI segment improvement
+- `POST /api/ai/edit-selection` — AI text selection editing
+- `POST /api/audio/generate/<segment_id>` — TTS audio generation
+- `GET /api/projects/<id>/timeline` — project timeline
+- `GET /api/projects/<id>/quality-check` — quality checks
+- `POST /api/projects/<id>/export` — folder export
+- `POST /api/projects/<id>/export-zip` — ZIP export
+- `POST /api/recommend-environment` — AI environment recommendation
+- `POST /api/projects/<id>/analyze-data` — AI dataset analysis
+- `POST /api/projects/<id>/generate-datasets` — dataset generation
+- `GET /api/system/ffmpeg-status` — FFmpeg availability
+
+Migration: `python scripts/migrate_v4_to_v5.py [--dry-run]`
+
+### Web App (v3.0 and v4.0 — legacy)
+
+**v3.0** (`app_v3.py`, ~2000 lines): Flask app with templates in `templates_v3/` and static assets in `static_v3/`. Screen recording uses FFmpeg with Windows GDI capture (`gdigrab`).
+
+**v4.0** (`app_v4.py`): Browser-native recording via MediaRecorder API. Templates in `templates_v4/`, static in `static_v4/`.
 
 State is held in an in-memory `current_project` dict. Projects persist to `projects/` directory as JSON + artifact files.
 

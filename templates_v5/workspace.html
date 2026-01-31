@@ -1,0 +1,981 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} - Workspace{% endblock %}
+
+{% block nav_items %}
+<a href="/dashboard" class="nav-link">Dashboard</a>
+<a href="/workspace/{{ project.id }}" class="nav-link active">Workspace</a>
+<a href="/player/{{ project.id }}" class="nav-link">Player</a>
+{% endblock %}
+
+{% block head %}
+<style>
+    .workspace-layout { display: flex; height: calc(100vh - 52px); }
+
+    /* ===== Left: Editor + Preview split ===== */
+    .editor-panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); min-width: 0; }
+    .editor-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+    .editor-toolbar .project-title { font-weight: 600; font-size: 15px; }
+    .editor-toolbar .spacer { flex: 1; }
+    .view-toggle { display: flex; background: var(--bg-card); border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); }
+    .view-toggle button { padding: 4px 12px; font-size: 12px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; }
+    .view-toggle button.active { background: var(--accent); color: white; }
+
+    .editor-split { flex: 1; display: flex; min-height: 0; }
+    .editor-split.view-raw .preview-pane { display: none; }
+    .editor-split.view-raw .raw-pane { flex: 1; }
+    .editor-split.view-preview .raw-pane { display: none; }
+    .editor-split.view-preview .preview-pane { flex: 1; }
+    .editor-split.view-split .raw-pane { flex: 1; border-right: 1px solid var(--border-color); }
+    .editor-split.view-split .preview-pane { flex: 1; }
+
+    .raw-pane { display: flex; flex-direction: column; min-width: 0; position: relative; }
+    #script-editor { flex: 1; width: 100%; background: var(--bg-primary); color: var(--text-primary); border: none; padding: 16px 20px; font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 13px; line-height: 1.6; resize: none; outline: none; }
+    .editor-status { padding: 6px 16px; font-size: 12px; color: var(--text-muted); background: var(--bg-secondary); border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; flex-shrink: 0; }
+
+    .preview-pane { overflow-y: auto; background: var(--bg-primary); }
+    .preview-pane-inner { padding: 16px; }
+    .empty-preview { color: var(--text-muted); font-size: 14px; text-align: center; padding: 60px 20px; }
+
+    /* ===== Segment Cards ===== */
+    .segment-card { background: var(--bg-secondary); border: 2px solid transparent; border-radius: var(--radius); margin-bottom: 12px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
+    .segment-card:hover { border-color: rgba(59, 130, 246, 0.3); }
+    .segment-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+    .segment-card-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border-color); }
+    .segment-card-header .seg-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; }
+    .seg-label.hook { background: rgba(16, 185, 129, 0.15); color: var(--accent-success); }
+    .seg-label.objective { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
+    .seg-label.content { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
+    .seg-label.ivq { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+    .seg-label.summary { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
+    .seg-label.cta { background: rgba(16, 185, 129, 0.15); color: var(--accent-success); }
+    .segment-card-header .seg-card-title { flex: 1; font-size: 13px; font-weight: 600; }
+    .segment-card-header .seg-card-dur { font-size: 11px; color: var(--text-muted); }
+    .segment-card-header .btn-ai-seg { background: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--text-muted); cursor: pointer; }
+    .segment-card-header .btn-ai-seg:hover { border-color: var(--accent); color: var(--accent); }
+    .segment-card-body { padding: 12px 14px; font-size: 13px; line-height: 1.65; max-height: 200px; overflow-y: auto; }
+    .segment-card-body h2, .segment-card-body h3 { font-size: 14px; margin: 8px 0 4px; }
+    .segment-card-body p { margin: 4px 0; }
+    .segment-card-body pre { background: var(--bg-card); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-size: 12px; margin: 6px 0; }
+    .segment-card-body code { font-family: 'JetBrains Mono', 'Consolas', monospace; }
+    .segment-card-body .screen-cue { background: rgba(245, 158, 11, 0.12); color: var(--accent-warning); padding: 1px 6px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+    .segment-card-body .marker { background: rgba(59, 130, 246, 0.12); color: var(--accent); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+
+    /* ===== Right panel: Actions ===== */
+    .actions-panel { width: 380px; display: flex; flex-direction: column; background: var(--bg-secondary); overflow-y: auto; flex-shrink: 0; }
+    .panel-section { padding: 16px; border-bottom: 1px solid var(--border-color); }
+    .panel-section h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .panel-header h3 { margin-bottom: 0; }
+    .collapse-icon { color: var(--text-muted); font-size: 12px; transition: transform 0.2s; }
+    .panel-section.collapsed .panel-body { display: none; }
+    .panel-section.collapsed .collapse-icon { transform: rotate(-90deg); }
+    .form-row { display: flex; gap: 12px; }
+    .form-row .form-group { flex: 1; }
+    .form-hint { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .required { color: var(--accent-danger); }
+    .optional { color: var(--text-muted); font-weight: 400; font-size: 11px; }
+    .gen-status { display: none; align-items: center; gap: 10px; padding: 12px; background: var(--bg-card); border-radius: var(--radius); margin-top: 12px; font-size: 13px; }
+    .gen-status.active { display: flex; }
+
+    .segment-list { max-height: 300px; overflow-y: auto; }
+    .segment-item { padding: 8px 12px; border-radius: var(--radius); margin-bottom: 4px; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 8px; }
+    .segment-item:hover { background: var(--bg-card); }
+    .segment-item .seg-type { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; flex-shrink: 0; }
+    .segment-item .seg-type.screencast { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
+    .segment-item .seg-type.slide { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
+    .segment-item .seg-type.ivq { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+    .segment-item .seg-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .segment-item .seg-duration { font-size: 11px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; }
+
+    /* ===== AI Helper Panel ===== */
+    .ai-helper-panel { position: fixed; right: 0; top: 52px; bottom: 0; width: 340px; background: var(--bg-secondary); border-left: 1px solid var(--border-color); box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4); z-index: 100; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.25s ease; }
+    .ai-helper-panel.open { transform: translateX(0); }
+    .ai-helper-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border-color); background: var(--bg-card); flex-shrink: 0; }
+    .ai-helper-header h3 { margin: 0; font-size: 15px; }
+    .btn-close-ai { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 2px 6px; }
+    .btn-close-ai:hover { color: var(--text-primary); }
+    .ai-helper-body { flex: 1; overflow-y: auto; padding: 16px; }
+    .ai-helper-body h4 { margin: 18px 0 8px; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .ai-helper-body h4:first-child { margin-top: 0; }
+    .selected-seg-info { background: var(--bg-card); padding: 10px 12px; border-radius: 6px; margin-bottom: 14px; font-size: 13px; }
+    .selected-seg-info .seg-info-label { color: var(--text-muted); }
+    .selected-seg-info .seg-info-name { font-weight: 600; color: var(--accent); }
+    .ai-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .ai-btn { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; font-size: 12px; color: var(--text-primary); cursor: pointer; text-align: left; transition: border-color 0.15s, background 0.15s; }
+    .ai-btn:hover { border-color: var(--accent); background: rgba(59, 130, 246, 0.06); }
+    .ai-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .custom-request textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); font-size: 13px; resize: vertical; margin-bottom: 8px; }
+    .ai-helper-status { padding: 12px 16px; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 13px; flex-shrink: 0; }
+    .ai-helper-status.hidden { display: none; }
+
+    /* ===== Text Selection AI Edit ===== */
+    .ai-edit-btn { position: absolute; display: none; background: var(--accent); color: white; border: none; border-radius: 6px; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; z-index: 50; box-shadow: 0 2px 12px rgba(59, 130, 246, 0.4); white-space: nowrap; }
+    .ai-edit-btn:hover { filter: brightness(1.15); }
+    .sel-edit-selected { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; margin-bottom: 12px; color: var(--text-secondary); }
+    .sel-edit-actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+    .sel-edit-actions button { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 4px; font-size: 11px; color: var(--text-primary); cursor: pointer; transition: border-color 0.15s; }
+    .sel-edit-actions button:hover { border-color: var(--accent); }
+    .sel-edit-preview { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; margin-top: 12px; display: none; }
+    .sel-edit-preview.has-content { display: block; }
+    .sel-edit-result-actions { display: none; gap: 8px; margin-top: 10px; }
+    .sel-edit-result-actions.visible { display: flex; }
+
+    /* ===== Quality Checks ===== */
+    .qc-check-list { display: flex; flex-direction: column; gap: 4px; }
+    .qc-check-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--bg-card); border-radius: 6px; font-size: 13px; cursor: pointer; transition: background 0.15s; }
+    .qc-check-item:hover { background: var(--bg-input); }
+    .qc-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+    .qc-icon.pending { background: rgba(107, 114, 128, 0.2); color: var(--text-muted); }
+    .qc-icon.pass { background: rgba(16, 185, 129, 0.2); color: var(--accent-success); }
+    .qc-icon.warn { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); }
+    .qc-icon.fail { background: rgba(239, 68, 68, 0.2); color: var(--accent-danger); }
+    .qc-name { flex: 1; }
+    .qc-score-badge { font-size: 11px; color: var(--text-muted); }
+    .qc-details { font-size: 12px; color: var(--text-secondary); padding: 6px 10px 10px 38px; display: none; line-height: 1.6; }
+    .qc-check-item.expanded + .qc-details { display: block; }
+    .qc-overall { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; background: var(--bg-card); border-radius: var(--radius); margin-bottom: 10px; font-size: 14px; font-weight: 600; }
+    .qc-overall-val { font-size: 22px; }
+    .qc-overall-val.good { color: var(--accent-success); }
+    .qc-overall-val.ok { color: var(--accent-warning); }
+    .qc-overall-val.bad { color: var(--accent-danger); }
+
+    /* ===== Export ===== */
+    .export-path-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .export-path-row input[type="text"] { flex: 1; }
+    .export-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .export-option { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+    .export-option input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .export-btns { display: flex; gap: 8px; }
+    .export-btns .btn { flex: 1; }
+    .folder-list { max-height: 280px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; margin: 10px 0; }
+    .folder-item { padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 6px; }
+    .folder-item:last-child { border-bottom: none; }
+    .folder-item:hover { background: var(--bg-card); }
+    .folder-path-current { font-size: 12px; color: var(--text-muted); word-break: break-all; margin-bottom: 8px; font-family: 'JetBrains Mono', monospace; }
+
+    /* ===== Environment Recommendation ===== */
+    .env-result { background: var(--bg-card); border-radius: 6px; padding: 12px; margin-top: 10px; display: none; }
+    .env-result.visible { display: block; }
+    .env-result .env-rec-name { font-size: 18px; font-weight: 700; color: var(--accent); }
+    .env-result .env-rec-conf { font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+    .env-result .env-rec-reason { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+    .env-result .env-rec-alts { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+    /* ===== Data Generation ===== */
+    .dataset-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    .dataset-item { background: var(--bg-card); border-radius: 6px; padding: 10px 12px; }
+    .dataset-item .ds-name { font-weight: 600; font-size: 13px; }
+    .dataset-item .ds-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .dataset-preview { font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: pre; overflow-x: auto; margin-top: 6px; max-height: 120px; overflow-y: auto; color: var(--text-secondary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="workspace-layout">
+    <!-- Script Editor + Preview -->
+    <div class="editor-panel">
+        <div class="editor-toolbar">
+            <span class="project-title">{{ project.name }}</span>
+            <span class="spacer"></span>
+            <div class="view-toggle">
+                <button onclick="setView('raw')" id="vt-raw">Raw</button>
+                <button onclick="setView('split')" id="vt-split" class="active">Split</button>
+                <button onclick="setView('preview')" id="vt-preview">Preview</button>
+            </div>
+            <button class="btn btn-sm" id="btn-save" onclick="saveScript()">Save</button>
+            <button class="btn btn-sm btn-primary" id="btn-parse" onclick="parseScript()">Parse</button>
+        </div>
+
+        <div class="editor-split view-split" id="editor-split">
+            <div class="raw-pane">
+                <textarea id="script-editor" placeholder="Write or generate your WWHAA+IVQ script here...&#10;&#10;## HOOK&#10;...&#10;## OBJECTIVE&#10;...&#10;## CONTENT&#10;...&#10;## IVQ&#10;...&#10;## SUMMARY&#10;...&#10;## CTA&#10;...">{{ project.script_raw or '' }}</textarea>
+                <button class="ai-edit-btn" id="ai-edit-btn" onclick="openSelectionEditModal()">AI Edit</button>
+            </div>
+            <div class="preview-pane">
+                <div class="preview-pane-inner" id="script-preview">
+                    <div class="empty-preview">Write or generate a script to see the preview</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="editor-status">
+            <span id="word-count">0 words</span>
+            <span id="save-status">Saved</span>
+        </div>
+    </div>
+
+    <!-- Actions Panel -->
+    <div class="actions-panel">
+        <!-- AI Script Generator -->
+        <div class="panel-section" id="generator-section">
+            <div class="panel-header" onclick="toggleSection('generator-section')">
+                <h3>AI Script Generator</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <form id="generatorForm" onsubmit="generateScript(event)">
+                    <div class="form-group">
+                        <label>Topic <span class="required">*</span></label>
+                        <textarea id="gen-topic" rows="2" placeholder="e.g. How to use pandas DataFrames to clean messy CSV data">{{ project.name }}</textarea>
+                        <div class="form-hint">Be specific. Include key concepts, tools, and outcomes.</div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Duration</label>
+                            <select id="gen-duration">
+                                <option value="3">3 min</option>
+                                <option value="5" selected>5 min</option>
+                                <option value="7">7 min</option>
+                                <option value="10">10 min</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Style</label>
+                            <select id="gen-style">
+                                <option value="tutorial" selected>Tutorial</option>
+                                <option value="demo">Demo</option>
+                                <option value="conceptual">Conceptual</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Environment</label>
+                            <select id="gen-environment">
+                                <option value="jupyter" selected>Jupyter</option>
+                                <option value="vscode">VS Code</option>
+                                <option value="terminal">Terminal</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Audience</label>
+                            <select id="gen-audience">
+                                <option value="beginner">Beginner</option>
+                                <option value="intermediate" selected>Intermediate</option>
+                                <option value="advanced">Advanced</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Learning Objectives <span class="optional">(optional)</span></label>
+                        <textarea id="gen-objectives" rows="2" placeholder="By the end of this video, learners will be able to..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Sample Data / Code <span class="optional">(optional)</span></label>
+                        <textarea id="gen-sample" rows="2" placeholder="Paste sample data, code snippets, or file contents..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Additional Instructions <span class="optional">(optional)</span></label>
+                        <textarea id="gen-notes" rows="2" placeholder="Any specific requirements or things to avoid..."></textarea>
+                    </div>
+                    <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">Coursera Metadata <span class="optional">(optional)</span></label>
+                    </div>
+                    <div class="form-group">
+                        <label>Course Name <span class="optional">(optional)</span></label>
+                        <input type="text" id="gen-course-name" placeholder="e.g. Python for Data Science" />
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Lesson #</label><input type="number" id="gen-lesson-num" min="1" placeholder="1" /></div>
+                        <div class="form-group"><label>Video #</label><input type="number" id="gen-video-num" min="1" placeholder="1" /></div>
+                        <div class="form-group">
+                            <label>Format</label>
+                            <select id="gen-format-type">
+                                <option value="screencast" selected>Screencast</option>
+                                <option value="slide">Slide-based</option>
+                                <option value="mixed">Mixed</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;" id="btn-ai-generate">Generate Script with AI</button>
+                </form>
+                <div class="gen-status" id="gen-status"><div class="spinner"></div><span>Generating script...</span></div>
+            </div>
+        </div>
+
+        <!-- Segments -->
+        <div class="panel-section">
+            <h3>Segments</h3>
+            <div class="segment-list" id="segment-list">
+                <p style="color: var(--text-muted); font-size: 13px; text-align: center;">Parse the script to see segments</p>
+            </div>
+        </div>
+
+        <!-- Quality Checks -->
+        <div class="panel-section" id="qc-section">
+            <div class="panel-header" onclick="toggleSection('qc-section')">
+                <h3>Quality Checks</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <div class="qc-overall" id="qc-overall">
+                    <span>Score:</span>
+                    <span class="qc-overall-val" id="qc-overall-val">--</span>
+                    <span style="color: var(--text-muted);">/ 100</span>
+                </div>
+                <button class="btn btn-primary btn-sm" style="width: 100%; margin-bottom: 10px;" onclick="runAllQualityChecks()">Run All Checks</button>
+                <div class="qc-check-list" id="qc-check-list"></div>
+            </div>
+        </div>
+
+        <!-- Environment Recommendation -->
+        <div class="panel-section" id="env-section">
+            <div class="panel-header" onclick="toggleSection('env-section')">
+                <h3>Environment</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <button class="btn btn-sm btn-primary" style="width: 100%;" id="btn-env-rec" onclick="recommendEnvironment()">Recommend Environment</button>
+                <div class="env-result" id="env-result">
+                    <div style="display: flex; align-items: center;">
+                        <span class="env-rec-name" id="env-rec-name"></span>
+                        <span class="env-rec-conf badge" id="env-rec-conf"></span>
+                    </div>
+                    <div class="env-rec-reason" id="env-rec-reason"></div>
+                    <div class="env-rec-alts" id="env-rec-alts"></div>
+                    <button class="btn btn-sm btn-success" style="margin-top: 8px;" onclick="applyEnvRecommendation()">Apply</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Generation -->
+        <div class="panel-section" id="data-section">
+            <div class="panel-header" onclick="toggleSection('data-section')">
+                <h3>Data Generation</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <button class="btn btn-sm" style="width: 100%; margin-bottom: 6px;" id="btn-analyze-data" onclick="analyzeData()">Analyze Data Needs</button>
+                <button class="btn btn-sm btn-success" style="width: 100%;" id="btn-gen-data" onclick="generateDatasets()" disabled>Generate Datasets</button>
+                <div class="dataset-list" id="dataset-list"></div>
+            </div>
+        </div>
+
+        <!-- Audio -->
+        <div class="panel-section">
+            <h3>Audio</h3>
+            <div class="form-group">
+                <label>Voice</label>
+                <select id="voice-select">
+                    <option value="en-US-AriaNeural">Aria (US Female)</option>
+                    <option value="en-US-JennyNeural">Jenny (US Female)</option>
+                    <option value="en-US-GuyNeural">Guy (US Male)</option>
+                    <option value="en-GB-SoniaNeural">Sonia (UK Female)</option>
+                    <option value="en-GB-RyanNeural">Ryan (UK Male)</option>
+                </select>
+            </div>
+            <button class="btn btn-success" style="width: 100%;" id="btn-gen-audio" onclick="generateAudio()">Generate All Audio</button>
+            <div id="audio-status" style="margin-top: 8px; font-size: 12px; color: var(--text-muted);"></div>
+        </div>
+
+        <!-- Export -->
+        <div class="panel-section" id="export-section">
+            <div class="panel-header" onclick="toggleSection('export-section')">
+                <h3>Export</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <label style="font-size: 12px;">Output Folder</label>
+                <div class="export-path-row">
+                    <input type="text" id="export-folder" placeholder="C:\output\my-screencast" />
+                    <button class="btn btn-sm" onclick="openFolderBrowser()">Browse</button>
+                </div>
+                <div class="export-options">
+                    <label class="export-option"><input type="checkbox" id="exp-script" checked /> Script (.md)</label>
+                    <label class="export-option"><input type="checkbox" id="exp-audio" /> Audio (.mp3)</label>
+                    <label class="export-option"><input type="checkbox" id="exp-code" /> Code Cells (.py)</label>
+                    <label class="export-option"><input type="checkbox" id="exp-notebook" /> Notebook (.ipynb)</label>
+                </div>
+                <div class="export-btns">
+                    <button class="btn btn-primary" onclick="exportToFolder()">Export to Folder</button>
+                    <button class="btn btn-success" onclick="exportAsZip()">Download ZIP</button>
+                </div>
+                <div id="export-status" style="margin-top: 8px; font-size: 12px; color: var(--text-muted);"></div>
+            </div>
+        </div>
+
+        <!-- Player Link -->
+        <div class="panel-section">
+            <a href="/player/{{ project.id }}" class="btn btn-lg" style="width: 100%; background: var(--gradient-accent); color: white;">Open Player</a>
+        </div>
+    </div>
+</div>
+
+<!-- AI Helper Slide-in Panel -->
+<div class="ai-helper-panel" id="ai-helper-panel">
+    <div class="ai-helper-header">
+        <h3>AI Helpers</h3>
+        <button class="btn-close-ai" onclick="closeAIHelper()">&times;</button>
+    </div>
+    <div class="ai-helper-body">
+        <div class="selected-seg-info">
+            <span class="seg-info-label">Selected: </span>
+            <span class="seg-info-name" id="ai-selected-name">---</span>
+        </div>
+        <h4>Quick Fixes</h4>
+        <div class="ai-btn-grid">
+            <button class="ai-btn" onclick="aiAction('shorten')">Make Shorter</button>
+            <button class="ai-btn" onclick="aiAction('expand')">Expand / Add Detail</button>
+            <button class="ai-btn" onclick="aiAction('fix_tone')">Fix Tone</button>
+            <button class="ai-btn" onclick="aiAction('simplify')">Simplify Language</button>
+        </div>
+        <h4>Code</h4>
+        <div class="ai-btn-grid">
+            <button class="ai-btn" onclick="aiAction('improve_code_explanation')">Improve Explanation</button>
+            <button class="ai-btn" onclick="aiAction('add_output')">Add Output Blocks</button>
+            <button class="ai-btn" onclick="aiAction('fix_code')">Fix Code Errors</button>
+            <button class="ai-btn" onclick="aiAction('add_comments')">Add Comments</button>
+        </div>
+        <h4>Structure</h4>
+        <div class="ai-btn-grid">
+            <button class="ai-btn" onclick="aiAction('add_visual_cue')">Add Visual Cues</button>
+            <button class="ai-btn" onclick="aiAction('improve_transition')">Improve Transition</button>
+            <button class="ai-btn" onclick="aiAction('add_pause')">Add Pauses</button>
+        </div>
+        <h4>IVQ</h4>
+        <div class="ai-btn-grid">
+            <button class="ai-btn" onclick="aiAction('balance_ivq_options')">Balance Options</button>
+            <button class="ai-btn" onclick="aiAction('improve_ivq_feedback')">Improve Feedback</button>
+            <button class="ai-btn" onclick="aiAction('make_ivq_harder')">Make Harder</button>
+            <button class="ai-btn" onclick="aiAction('make_ivq_easier')">Make Easier</button>
+        </div>
+        <h4>Custom</h4>
+        <div class="custom-request">
+            <textarea id="custom-ai-request" rows="3" placeholder="Describe what you want to change..."></textarea>
+            <button class="btn btn-primary" style="width: 100%;" onclick="aiAction('custom')">Apply Custom Fix</button>
+        </div>
+    </div>
+    <div class="ai-helper-status hidden" id="ai-helper-status"><div class="spinner"></div><span>Applying fix...</span></div>
+</div>
+
+<!-- Selection AI Edit Modal -->
+<div class="modal-backdrop" id="sel-edit-modal">
+    <div class="modal" style="max-width: 620px;" onclick="event.stopPropagation()">
+        <h2>AI Edit Selection</h2>
+        <label style="font-size: 12px; color: var(--text-muted);">Selected Text:</label>
+        <div class="sel-edit-selected" id="sel-edit-selected-text"></div>
+        <label style="font-size: 12px; color: var(--text-muted);">Quick Actions:</label>
+        <div class="sel-edit-actions">
+            <button onclick="selEditAction('improve')">Improve</button>
+            <button onclick="selEditAction('shorten')">Shorten</button>
+            <button onclick="selEditAction('expand')">Expand</button>
+            <button onclick="selEditAction('rewrite')">Rewrite</button>
+            <button onclick="selEditAction('fix_grammar')">Fix Grammar</button>
+            <button onclick="selEditAction('simplify')">Simplify</button>
+            <button onclick="selEditAction('fix_code')">Fix Code</button>
+            <button onclick="selEditAction('add_comments')">Comments</button>
+            <button onclick="selEditAction('add_output')">Add Output</button>
+            <button onclick="selEditAction('optimize')">Optimize</button>
+        </div>
+        <label style="font-size: 12px; color: var(--text-muted);">Custom Instruction:</label>
+        <div style="display: flex; gap: 8px; margin-bottom: 4px;">
+            <textarea id="sel-edit-custom" rows="2" style="flex: 1; min-height: 40px;" placeholder="Describe what you want to change..."></textarea>
+            <button class="btn btn-primary btn-sm" onclick="selEditAction('custom')" style="flex-shrink: 0;">Apply</button>
+        </div>
+        <div class="sel-edit-preview" id="sel-edit-preview"></div>
+        <div class="sel-edit-result-actions" id="sel-edit-result-actions">
+            <button class="btn btn-success" onclick="acceptSelEdit()">Accept</button>
+            <button class="btn btn-danger" onclick="rejectSelEdit()">Reject</button>
+            <button class="btn" onclick="retrySelEdit()">Retry</button>
+        </div>
+        <div class="modal-actions"><button class="btn" onclick="closeSelEditModal()">Cancel</button></div>
+    </div>
+</div>
+
+<!-- Folder Browser Modal -->
+<div class="modal-backdrop" id="folder-browser-modal">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h2>Select Folder</h2>
+        <div class="folder-path-current" id="folder-browser-current">Loading...</div>
+        <div class="folder-list" id="folder-browser-list"></div>
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <input type="text" id="new-folder-name" placeholder="New folder name" style="flex: 1;" />
+            <button class="btn btn-sm" onclick="createNewFolder()">Create</button>
+        </div>
+        <div class="modal-actions">
+            <button class="btn" onclick="closeFolderBrowser()">Cancel</button>
+            <button class="btn btn-primary" onclick="selectCurrentFolder()">Select This Folder</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PROJECT_ID = '{{ project.id }}';
+const editor = document.getElementById('script-editor');
+let parsedSegments = [];
+let selectedSegIdx = null;
+
+// ===== View Toggle =====
+function setView(mode) {
+    const split = document.getElementById('editor-split');
+    split.className = 'editor-split view-' + mode;
+    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+    document.getElementById('vt-' + mode).classList.add('active');
+}
+
+// ===== Word Count =====
+editor.addEventListener('input', () => {
+    const words = editor.value.trim().split(/\s+/).filter(w => w).length;
+    document.getElementById('word-count').textContent = `${words} words (~${Math.round(words / 150)} min)`;
+    document.getElementById('save-status').textContent = 'Unsaved';
+    debouncePreview();
+});
+editor.dispatchEvent(new Event('input'));
+
+function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
+
+// ===== Markdown Rendering =====
+if (typeof marked !== 'undefined') {
+    marked.setOptions({
+        highlight: function(code, lang) {
+            if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) return hljs.highlight(code, { language: lang }).value;
+            if (typeof hljs !== 'undefined') return hljs.highlightAuto(code).value;
+            return code;
+        },
+        breaks: true
+    });
+}
+
+function renderMd(text) {
+    if (typeof marked === 'undefined') return text.replace(/</g, '&lt;').replace(/\n/g, '<br>');
+    let s = text
+        .replace(/\*\*\[(RUN CELL|TYPE|SHOW|PAUSE)\]\*\*/g, '<span class="marker">[$1]</span>')
+        .replace(/\[SCREEN:\s*([^\]]+)\]/g, '<span class="screen-cue">[SCREEN: $1]</span>');
+    return marked.parse(s);
+}
+
+// ===== Preview Rendering =====
+let previewTimer;
+function debouncePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(renderPreview, 400); }
+
+function renderPreview() {
+    const script = editor.value.trim();
+    const container = document.getElementById('script-preview');
+    if (!script) { container.innerHTML = '<div class="empty-preview">Write or generate a script to see the preview</div>'; return; }
+
+    const sectionPattern = /^##\s+(HOOK|OBJECTIVE|CONTENT|IVQ|SUMMARY|CALL TO ACTION|CTA)(.*)$/gm;
+    const sections = [];
+    let match, lastIdx = 0, lastName = null, lastSubtitle = '';
+    const tableEnd = script.search(/^##\s+/m);
+    const scriptBody = tableEnd > 0 ? script.substring(tableEnd) : script;
+    const metaTable = tableEnd > 0 ? script.substring(0, tableEnd).trim() : '';
+
+    while ((match = sectionPattern.exec(scriptBody)) !== null) {
+        if (lastName !== null) sections.push({ name: lastName, subtitle: lastSubtitle, content: scriptBody.substring(lastIdx, match.index).trim() });
+        lastName = match[1]; lastSubtitle = match[2].trim().replace(/^[-:\s]+/, ''); lastIdx = match.index + match[0].length;
+    }
+    if (lastName !== null) sections.push({ name: lastName, subtitle: lastSubtitle, content: scriptBody.substring(lastIdx).trim() });
+    if (sections.length === 0) { container.innerHTML = '<div class="empty-preview">No WWHAA sections detected.</div>'; return; }
+
+    let html = '';
+    if (metaTable) html += `<div style="margin-bottom: 16px; font-size: 13px; opacity: 0.7;">${renderMd(metaTable)}</div>`;
+    sections.forEach((sec, i) => {
+        const labelClass = sec.name.toLowerCase().replace(/\s+/g, '');
+        const selected = selectedSegIdx === i ? ' selected' : '';
+        const title = sec.subtitle || sec.name;
+        const words = sec.content.split(/\s+/).filter(w => w).length;
+        const secs = Math.round(words / 2.5);
+        const durStr = secs < 60 ? `~${secs}s` : `~${Math.floor(secs/60)}m ${secs%60}s`;
+        html += `<div class="segment-card${selected}" data-seg-idx="${i}" onclick="selectSegment(${i})">
+            <div class="segment-card-header">
+                <span class="seg-label ${labelClass}">${escapeHtml(sec.name)}</span>
+                <span class="seg-card-title">${escapeHtml(title)}</span>
+                <span class="seg-card-dur">${durStr}</span>
+                <button class="btn-ai-seg" onclick="event.stopPropagation(); selectSegment(${i}); openAIHelper()">AI</button>
+            </div>
+            <div class="segment-card-body">${renderMd(sec.content)}</div>
+        </div>`;
+    });
+    container.innerHTML = html;
+    window._previewSections = sections;
+}
+
+// ===== Segment Selection & AI Helper =====
+function selectSegment(idx) {
+    selectedSegIdx = idx;
+    document.querySelectorAll('.segment-card').forEach(c => c.classList.remove('selected'));
+    const card = document.querySelector(`[data-seg-idx="${idx}"]`);
+    if (card) card.classList.add('selected');
+}
+
+function openAIHelper() {
+    if (selectedSegIdx === null || !window._previewSections) return;
+    const sec = window._previewSections[selectedSegIdx];
+    document.getElementById('ai-selected-name').textContent = sec.name + (sec.subtitle ? ': ' + sec.subtitle : '');
+    document.getElementById('ai-helper-panel').classList.add('open');
+}
+function closeAIHelper() { document.getElementById('ai-helper-panel').classList.remove('open'); }
+
+function getSelectedSectionText() {
+    if (selectedSegIdx === null || !window._previewSections) return null;
+    const sec = window._previewSections[selectedSegIdx];
+    return `## ${sec.name}${sec.subtitle ? ' - ' + sec.subtitle : ''}\n\n${sec.content}`;
+}
+
+function replaceSectionInEditor(idx, newText) {
+    const script = editor.value;
+    const sec = window._previewSections[idx];
+    const headerPattern = new RegExp(`## ${sec.name}[^\\n]*\\n[\\s\\S]*?(?=## (?:HOOK|OBJECTIVE|CONTENT|IVQ|SUMMARY|CALL TO ACTION|CTA)|$)`, 'i');
+    const match = script.match(headerPattern);
+    if (match) { editor.value = script.replace(match[0], newText.trim() + '\n\n'); editor.dispatchEvent(new Event('input')); }
+}
+
+async function aiAction(action) {
+    const segText = getSelectedSectionText();
+    if (!segText) { showToast('Select a segment first', 'error'); return; }
+    const statusDiv = document.getElementById('ai-helper-status');
+    statusDiv.classList.remove('hidden');
+    document.querySelectorAll('.ai-btn').forEach(b => b.disabled = true);
+    try {
+        const customInstruction = action === 'custom' ? document.getElementById('custom-ai-request').value : '';
+        const data = await api('/api/ai/improve-segment', {
+            method: 'POST', body: JSON.stringify({ segment_text: segText, action, custom_instruction: customInstruction })
+        });
+        if (data.success) {
+            replaceSectionInEditor(selectedSegIdx, data.improved_segment);
+            renderPreview();
+            setTimeout(() => selectSegment(selectedSegIdx), 100);
+            showToast(`Applied: ${action.replace(/_/g, ' ')}`);
+        }
+    } catch (err) { showToast('AI error: ' + err.message, 'error'); }
+    finally { statusDiv.classList.add('hidden'); document.querySelectorAll('.ai-btn').forEach(b => b.disabled = false); }
+}
+
+// ===== Core Functions =====
+{% if project.segments %}
+parsedSegments = {{ project.segments | tojson }};
+renderSegments(parsedSegments);
+{% endif %}
+
+{% if project.config and project.config.duration_minutes %}
+document.getElementById('gen-duration').value = '{{ project.config.duration_minutes }}';
+{% endif %}
+
+function toggleSection(sectionId) { document.getElementById(sectionId).classList.toggle('collapsed'); }
+
+async function saveScript() {
+    try {
+        await api(`/api/projects/${PROJECT_ID}`, { method: 'PUT', body: JSON.stringify({ script_raw: editor.value }) });
+        document.getElementById('save-status').textContent = 'Saved';
+        showToast('Script saved');
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function generateScript(e) {
+    if (e) e.preventDefault();
+    const topic = document.getElementById('gen-topic').value.trim();
+    if (!topic) { showToast('Enter a topic', 'error'); return; }
+    const btn = document.getElementById('btn-ai-generate');
+    const status = document.getElementById('gen-status');
+    btn.disabled = true; btn.textContent = 'Generating...'; status.classList.add('active');
+    try {
+        const data = await api('/api/generate/script', {
+            method: 'POST', body: JSON.stringify({
+                topic, duration_minutes: parseInt(document.getElementById('gen-duration').value) || 5,
+                style: document.getElementById('gen-style').value, environment: document.getElementById('gen-environment').value,
+                audience: document.getElementById('gen-audience').value,
+                learning_objectives: document.getElementById('gen-objectives').value.trim() || null,
+                sample_code: document.getElementById('gen-sample').value.trim() || null,
+                notes: document.getElementById('gen-notes').value.trim() || null,
+                course_name: document.getElementById('gen-course-name').value.trim() || null,
+                lesson_number: parseInt(document.getElementById('gen-lesson-num').value) || null,
+                video_number: parseInt(document.getElementById('gen-video-num').value) || null,
+                format_type: document.getElementById('gen-format-type').value
+            })
+        });
+        editor.value = data.script; editor.dispatchEvent(new Event('input'));
+        showToast('Script generated'); await saveScript(); await parseScript();
+        document.getElementById('generator-section').classList.add('collapsed');
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Generate Script with AI'; status.classList.remove('active'); }
+}
+
+async function parseScript() {
+    const text = editor.value.trim();
+    if (!text) { showToast('No script to parse', 'error'); return; }
+    const duration = parseInt(document.getElementById('gen-duration').value) || 5;
+    try {
+        const data = await api('/api/parse/script', {
+            method: 'POST', body: JSON.stringify({ script_text: text, project_id: PROJECT_ID, duration_minutes: duration })
+        });
+        parsedSegments = data.segments; renderSegments(data.segments); renderPreview();
+        showToast(`Parsed ${data.segments.length} segments`);
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+function renderSegments(segments) {
+    const list = document.getElementById('segment-list');
+    if (!segments || segments.length === 0) { list.innerHTML = '<p style="color: var(--text-muted); font-size: 13px; text-align: center;">No segments</p>'; return; }
+    list.innerHTML = segments.map(s => `
+        <div class="segment-item">
+            <span class="seg-type ${s.section === 'IVQ' ? 'ivq' : s.type}">${s.section === 'IVQ' ? 'IVQ' : escapeHtml(s.type)}</span>
+            <span class="seg-title">${escapeHtml(s.section)}: ${escapeHtml(s.title)}</span>
+            <span class="seg-duration">${Math.round(s.duration_seconds || 0)}s</span>
+        </div>
+    `).join('');
+}
+
+async function generateAudio() {
+    const btn = document.getElementById('btn-gen-audio');
+    const status = document.getElementById('audio-status');
+    btn.disabled = true; btn.textContent = 'Generating...'; status.textContent = 'Generating audio for all segments...';
+    const voice = document.getElementById('voice-select').value;
+    try {
+        await saveScript();
+        const text = editor.value.trim();
+        if (text) {
+            const duration = parseInt(document.getElementById('gen-duration').value) || 5;
+            await api('/api/parse/script', { method: 'POST', body: JSON.stringify({ script_text: text, project_id: PROJECT_ID, duration_minutes: duration }) });
+        }
+        const data = await api('/api/audio/generate-all', { method: 'POST', body: JSON.stringify({ project_id: PROJECT_ID, voice }) });
+        const totalMin = (data.total_duration_seconds / 60).toFixed(1);
+        status.textContent = `${data.segments_generated} segments, ${totalMin} min total`;
+        showToast('Audio generated', 'success');
+    } catch (err) { status.textContent = 'Error: ' + err.message; showToast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Generate All Audio'; }
+}
+
+// ===== Keyboard Shortcuts =====
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveScript(); }
+    if (e.key === 'Escape') { closeAIHelper(); closeSelEditModal(); closeFolderBrowser(); }
+});
+document.querySelectorAll('.modal-backdrop').forEach(el => {
+    el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
+});
+setTimeout(renderPreview, 100);
+
+// =====================================================================
+// TEXT SELECTION AI EDITING
+// =====================================================================
+let selEditState = { start: 0, end: 0, selectedText: '', editedText: '', lastAction: '' };
+editor.addEventListener('mouseup', showAIEditButton);
+editor.addEventListener('keyup', function(e) { if (e.shiftKey) showAIEditButton(); });
+
+function showAIEditButton() {
+    const btn = document.getElementById('ai-edit-btn');
+    const start = editor.selectionStart, end = editor.selectionEnd;
+    if (start === end) { btn.style.display = 'none'; return; }
+    const textBefore = editor.value.substring(0, start);
+    const lineNum = textBefore.split('\n').length;
+    const lineHeight = 13 * 1.6;
+    const topOffset = (lineNum * lineHeight) - editor.scrollTop + 20;
+    const clamped = Math.max(10, Math.min(topOffset, editor.clientHeight - 30));
+    btn.style.display = 'block'; btn.style.top = clamped + 'px'; btn.style.right = '16px';
+}
+
+function openSelectionEditModal() {
+    const start = editor.selectionStart, end = editor.selectionEnd;
+    if (start === end) { showToast('Select some text first', 'error'); return; }
+    selEditState.start = start; selEditState.end = end;
+    selEditState.selectedText = editor.value.substring(start, end); selEditState.editedText = '';
+    document.getElementById('sel-edit-selected-text').textContent = selEditState.selectedText;
+    document.getElementById('sel-edit-preview').textContent = '';
+    document.getElementById('sel-edit-preview').classList.remove('has-content');
+    document.getElementById('sel-edit-result-actions').classList.remove('visible');
+    document.getElementById('ai-edit-btn').style.display = 'none';
+    document.getElementById('sel-edit-modal').classList.add('active');
+}
+function closeSelEditModal() { document.getElementById('sel-edit-modal').classList.remove('active'); }
+
+async function selEditAction(action) {
+    selEditState.lastAction = action;
+    const customInstruction = action === 'custom' ? document.getElementById('sel-edit-custom').value : '';
+    if (action === 'custom' && !customInstruction.trim()) { showToast('Enter a custom instruction', 'error'); return; }
+    const preview = document.getElementById('sel-edit-preview');
+    preview.textContent = 'Generating...'; preview.classList.add('has-content');
+    document.getElementById('sel-edit-result-actions').classList.remove('visible');
+    try {
+        const data = await api('/api/ai/edit-selection', {
+            method: 'POST', body: JSON.stringify({ selected_text: selEditState.selectedText, action, custom_instruction: customInstruction, full_script: editor.value })
+        });
+        selEditState.editedText = data.edited_text; preview.textContent = data.edited_text;
+        document.getElementById('sel-edit-result-actions').classList.add('visible');
+    } catch (err) { preview.textContent = 'Error: ' + err.message; showToast('AI edit error: ' + err.message, 'error'); }
+}
+
+function acceptSelEdit() {
+    if (!selEditState.editedText) return;
+    editor.value = editor.value.substring(0, selEditState.start) + selEditState.editedText + editor.value.substring(selEditState.end);
+    editor.dispatchEvent(new Event('input')); closeSelEditModal(); showToast('Edit applied');
+}
+function rejectSelEdit() {
+    document.getElementById('sel-edit-preview').textContent = '';
+    document.getElementById('sel-edit-preview').classList.remove('has-content');
+    document.getElementById('sel-edit-result-actions').classList.remove('visible'); selEditState.editedText = '';
+}
+function retrySelEdit() { if (selEditState.lastAction) selEditAction(selEditState.lastAction); }
+
+// =====================================================================
+// QUALITY CHECKS
+// =====================================================================
+const QC_CHECKS = [
+    { id: 'structure', name: 'WWHAA Structure', weight: 20 }, { id: 'code', name: 'Code Validation', weight: 15 },
+    { id: 'duration', name: 'Duration Balance', weight: 15 }, { id: 'narration', name: 'Narration Quality', weight: 15 },
+    { id: 'visual_cues', name: 'Visual Cues', weight: 10 }, { id: 'ivq', name: 'IVQ Quality', weight: 10 },
+    { id: 'coursera', name: 'Coursera Compliance', weight: 15 }
+];
+
+function initQCList() {
+    document.getElementById('qc-check-list').innerHTML = QC_CHECKS.map(c => `
+        <div class="qc-check-item" data-check="${c.id}" onclick="toggleQCDetails('${c.id}')">
+            <span class="qc-icon pending" id="qc-icon-${c.id}">\u2014</span>
+            <span class="qc-name">${c.name}</span>
+            <span class="qc-score-badge" id="qc-score-${c.id}"></span>
+        </div>
+        <div class="qc-details" id="qc-details-${c.id}"></div>
+    `).join('');
+}
+initQCList();
+
+function toggleQCDetails(id) { document.querySelector(`.qc-check-item[data-check="${id}"]`).classList.toggle('expanded'); }
+function setQCStatus(id, status, ch, scoreText, details) {
+    const icon = document.getElementById('qc-icon-' + id);
+    icon.className = 'qc-icon ' + status; icon.textContent = ch;
+    document.getElementById('qc-score-' + id).textContent = scoreText || '';
+    if (details !== undefined) document.getElementById('qc-details-' + id).innerHTML = details;
+}
+
+async function runAllQualityChecks() {
+    const script = editor.value.trim();
+    if (!script) { showToast('No script to check', 'error'); return; }
+    QC_CHECKS.forEach(c => setQCStatus(c.id, 'pending', '\u2026', ''));
+    const results = {};
+    results.structure = checkStructure(script); results.duration = checkDuration(script);
+    results.narration = checkNarration(script); results.visual_cues = checkVisualCues(script);
+    results.ivq = checkIVQ(script); results.coursera = checkCoursera(script);
+    for (const [id, r] of Object.entries(results)) setQCStatus(id, r.status, r.ch, r.score + '%', r.details);
+    try {
+        const data = await api('/api/validate-all-code', { method: 'POST', body: JSON.stringify({ script_text: script }) });
+        results.code = processCodeValidation(data);
+        setQCStatus('code', results.code.status, results.code.ch, results.code.score + '%', results.code.details);
+    } catch (err) { results.code = { status: 'fail', ch: '!', score: 0, details: 'Error: ' + err.message }; setQCStatus('code', 'fail', '!', '0%', 'Error: ' + err.message); }
+    let totalScore = 0, totalWeight = 0;
+    QC_CHECKS.forEach(c => { if (results[c.id]) { totalScore += results[c.id].score * c.weight; totalWeight += c.weight; } });
+    const overall = totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0;
+    const el = document.getElementById('qc-overall-val');
+    el.textContent = overall; el.className = 'qc-overall-val ' + (overall >= 75 ? 'good' : overall >= 50 ? 'ok' : 'bad');
+    showToast('Quality checks complete: ' + overall + '/100');
+}
+
+function checkStructure(script) { const req = ['HOOK','OBJECTIVE','CONTENT','SUMMARY']; const found = req.filter(s => new RegExp('##\\s+'+s,'i').test(script)); const hasCTA = /##\s+(CALL TO ACTION|CTA)/i.test(script); const total = found.length + (hasCTA?1:0); const max = req.length+1; const score = Math.round((total/max)*100); const missing = req.filter(s => !found.includes(s)); if (!hasCTA) missing.push('CTA'); const status = score>=80?'pass':score>=60?'warn':'fail'; return {status, ch: status==='pass'?'\u2713':'\u2717', score, details: missing.length ? 'Missing: '+missing.join(', ') : 'All WWHAA sections present.'}; }
+function checkDuration(script) { const words = script.trim().split(/\s+/).filter(w=>w).length; const est = words/150; const target = parseInt(document.getElementById('gen-duration').value)||5; const ratio = est/target; if (ratio>=0.8&&ratio<=1.2) return {status:'pass',ch:'\u2713',score:100,details:`~${est.toFixed(1)} min (target ${target}). Good match.`}; if (ratio>=0.6&&ratio<=1.5) return {status:'warn',ch:'!',score:60,details:`~${est.toFixed(1)} min vs ${target} min target.`}; return {status:'fail',ch:'\u2717',score:20,details:`~${est.toFixed(1)} min vs ${target} min target. Significant mismatch.`}; }
+function checkNarration(script) { const issues=[]; let score=100; const paras=script.split(/\n\n+/); const longP=paras.filter(p=>p.trim().split(/\s+/).length>100).length; if(longP>0){issues.push(longP+' paragraph(s) over 100 words.');score-=15*longP;} const pauseCount=(script.match(/\[PAUSE\]/g)||[]).length; if(pauseCount<2){issues.push('Fewer than 2 [PAUSE] markers.');score-=15;} score=Math.max(0,score); const status=score>=75?'pass':score>=50?'warn':'fail'; return {status,ch:status==='pass'?'\u2713':'!',score,details:issues.length?issues.join('<br>'):'Narration quality looks good.'}; }
+function checkVisualCues(script) { const cues=(script.match(/\[SCREEN:\s*[^\]]+\]/g)||[]).length; const sections=(script.match(/^##\s+/gm)||[]).length; const expected=Math.max(sections,3); const score=Math.min(100,Math.round((cues/expected)*100)); const status=score>=70?'pass':score>=40?'warn':'fail'; return {status,ch:status==='pass'?'\u2713':'!',score,details:`${cues} [SCREEN:] cues across ${sections} sections.`}; }
+function checkIVQ(script) { if(!/##\s+IVQ/i.test(script)) return {status:'fail',ch:'\u2717',score:0,details:'No IVQ section found.'}; const ivq=script.match(/##\s+IVQ[\s\S]*?(?=##\s+(?:HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION|CTA)|$)/i); if(!ivq) return {status:'warn',ch:'!',score:50,details:'IVQ section found but could not parse.'}; const t=ivq[0]; const hasOpts=/[A-D]\)/i.test(t); const hasFeedback=/feedback|correct|incorrect/i.test(t); let score=50; const issues=[]; if(hasOpts) score+=25; else issues.push('No A/B/C/D options.'); if(hasFeedback) score+=25; else issues.push('No feedback text.'); const status=score>=75?'pass':score>=50?'warn':'fail'; return {status,ch:status==='pass'?'\u2713':'!',score,details:issues.length?issues.join('<br>'):'IVQ looks complete.'}; }
+function checkCoursera(script) { const issues=[]; let score=100; if(!/\|.*Course.*\|/i.test(script)){issues.push('No metadata table.');score-=20;} const words=script.trim().split(/\s+/).filter(w=>w).length; const est=words/150; if(est<3||est>10){issues.push(`Duration ~${est.toFixed(1)} min (Coursera: 3-10 min).`);score-=15;} if(/previous video|next video|last module/i.test(script)){issues.push('Contains sequential references.');score-=20;} score=Math.max(0,score); const status=score>=75?'pass':score>=50?'warn':'fail'; return {status,ch:status==='pass'?'\u2713':'!',score,details:issues.length?issues.join('<br>'):'Coursera compliance checks passed.'}; }
+function processCodeValidation(data) { if(data.total_blocks===0) return {status:'warn',ch:'!',score:50,details:'No Python code blocks found.'}; const score=Math.round(((data.total_blocks-data.invalid_count)/data.total_blocks)*100); const status=score===100?'pass':score>=70?'warn':'fail'; let details=`${data.total_blocks-data.invalid_count}/${data.total_blocks} code blocks valid.`; if(data.invalid_count>0){details+='<br>'+data.results.filter(r=>!r.valid).map(r=>`Block ${r.index+1}: ${r.error}`).join('<br>');} return {status,ch:status==='pass'?'\u2713':'!',score,details}; }
+
+// =====================================================================
+// EXPORT
+// =====================================================================
+let folderBrowserPath = '.';
+function getExportOptions() { return { script: document.getElementById('exp-script').checked, audio: document.getElementById('exp-audio').checked, code: document.getElementById('exp-code').checked, notebook: document.getElementById('exp-notebook').checked }; }
+
+async function exportToFolder() {
+    const folder = document.getElementById('export-folder').value.trim();
+    if (!folder) { showToast('Enter an output folder path', 'error'); return; }
+    const status = document.getElementById('export-status'); status.textContent = 'Exporting...';
+    try { const data = await api(`/api/projects/${PROJECT_ID}/export`, { method: 'POST', body: JSON.stringify({ output_folder: folder, options: getExportOptions() }) }); status.textContent = `Exported ${data.count} file(s)`; showToast(`Exported ${data.count} files`); }
+    catch (err) { status.textContent = 'Error: ' + err.message; showToast(err.message, 'error'); }
+}
+
+async function exportAsZip() {
+    const status = document.getElementById('export-status'); status.textContent = 'Preparing ZIP...';
+    try { const resp = await fetch(`/api/projects/${PROJECT_ID}/export-zip`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ options: getExportOptions() }) }); if (!resp.ok) { const err = await resp.json(); throw new Error(err.error||'Export failed'); } const blob = await resp.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = resp.headers.get('Content-Disposition')?.split('filename=')[1] || 'export.zip'; a.click(); URL.revokeObjectURL(url); status.textContent = 'ZIP downloaded'; showToast('ZIP downloaded'); }
+    catch (err) { status.textContent = 'Error: ' + err.message; showToast(err.message, 'error'); }
+}
+
+async function openFolderBrowser() { folderBrowserPath = document.getElementById('export-folder').value.trim() || '.'; document.getElementById('folder-browser-modal').classList.add('active'); await loadFolderList(folderBrowserPath); }
+function closeFolderBrowser() { document.getElementById('folder-browser-modal').classList.remove('active'); }
+
+async function loadFolderList(path) {
+    try { const data = await api('/api/browse-folders?path=' + encodeURIComponent(path)); folderBrowserPath = data.current; document.getElementById('folder-browser-current').textContent = data.current; let html = ''; if (data.parent) html += `<div class="folder-item" onclick="loadFolderList('${data.parent.replace(/\\/g, '\\\\')}')">&#128193; ..</div>`; data.folders.forEach(f => { html += `<div class="folder-item" onclick="loadFolderList('${f.path.replace(/\\/g, '\\\\')}')">&#128193; ${f.name}</div>`; }); if (!html) html = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No subfolders</div>'; document.getElementById('folder-browser-list').innerHTML = html; }
+    catch (err) { showToast('Could not list folders: ' + err.message, 'error'); }
+}
+function selectCurrentFolder() { document.getElementById('export-folder').value = folderBrowserPath; closeFolderBrowser(); }
+async function createNewFolder() { const name = document.getElementById('new-folder-name').value.trim(); if (!name) { showToast('Enter a folder name', 'error'); return; } const sep = folderBrowserPath.includes('/') ? '/' : '\\'; try { await api('/api/create-folder', { method: 'POST', body: JSON.stringify({ path: folderBrowserPath + sep + name }) }); document.getElementById('new-folder-name').value = ''; await loadFolderList(folderBrowserPath); showToast('Folder created'); } catch (err) { showToast(err.message, 'error'); } }
+
+// =====================================================================
+// ENVIRONMENT RECOMMENDATION
+// =====================================================================
+let envRecommendation = null;
+
+async function recommendEnvironment() {
+    const btn = document.getElementById('btn-env-rec');
+    btn.disabled = true; btn.textContent = 'Analyzing...';
+    const topic = document.getElementById('gen-topic').value.trim() || '{{ project.name }}';
+    try {
+        const data = await api('/api/recommend-environment', {
+            method: 'POST', body: JSON.stringify({ topic, audience: document.getElementById('gen-audience').value })
+        });
+        envRecommendation = data;
+        document.getElementById('env-rec-name').textContent = data.recommended;
+        const conf = document.getElementById('env-rec-conf');
+        conf.textContent = data.confidence;
+        conf.className = 'env-rec-conf badge ' + (data.confidence === 'high' ? 'badge-success' : data.confidence === 'medium' ? 'badge-warning' : 'badge-primary');
+        document.getElementById('env-rec-reason').textContent = data.reason || '';
+        document.getElementById('env-rec-alts').textContent = data.alternatives ? 'Alternatives: ' + data.alternatives.join(', ') : '';
+        document.getElementById('env-result').classList.add('visible');
+        showToast('Environment recommendation ready');
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Recommend Environment'; }
+}
+
+function applyEnvRecommendation() {
+    if (!envRecommendation) return;
+    document.getElementById('gen-environment').value = envRecommendation.recommended;
+    showToast('Environment set to ' + envRecommendation.recommended);
+}
+
+// =====================================================================
+// DATA GENERATION
+// =====================================================================
+let dataConfigs = [];
+
+async function analyzeData() {
+    const btn = document.getElementById('btn-analyze-data');
+    btn.disabled = true; btn.textContent = 'Analyzing...';
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/analyze-data`, {
+            method: 'POST', body: JSON.stringify({ demo_requirements: editor.value.substring(0, 2000) })
+        });
+        dataConfigs = data.datasets || [];
+        if (dataConfigs.length === 0) { showToast('No datasets recommended', 'info'); return; }
+        document.getElementById('btn-gen-data').disabled = false;
+        const list = document.getElementById('dataset-list');
+        list.innerHTML = dataConfigs.map(d => `
+            <div class="dataset-item">
+                <div class="ds-name">${d.name}</div>
+                <div class="ds-meta">${d.rows || 100} rows, ${(d.columns||[]).length} columns - ${d.description || ''}</div>
+            </div>
+        `).join('');
+        showToast(`${dataConfigs.length} dataset(s) recommended`);
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Analyze Data Needs'; }
+}
+
+async function generateDatasets() {
+    if (dataConfigs.length === 0) { showToast('Analyze data needs first', 'error'); return; }
+    const btn = document.getElementById('btn-gen-data');
+    btn.disabled = true; btn.textContent = 'Generating...';
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/generate-datasets`, {
+            method: 'POST', body: JSON.stringify({ configs: dataConfigs })
+        });
+        const list = document.getElementById('dataset-list');
+        list.innerHTML = data.datasets.map(d => `
+            <div class="dataset-item">
+                <div class="ds-name">${d.name} <a href="/api/data/${PROJECT_ID}/${d.filename}" target="_blank" style="font-size:11px;">(download)</a></div>
+                <div class="ds-meta">${d.rows} rows, ${d.columns.length} columns</div>
+                <div class="dataset-preview">${d.preview}</div>
+            </div>
+        `).join('');
+        showToast(`${data.datasets.length} dataset(s) generated`);
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Generate Datasets'; }
+}
+</script>
+{% endblock %}
