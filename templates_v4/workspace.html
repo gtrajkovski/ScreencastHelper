@@ -14,7 +14,7 @@
         height: calc(100vh - 52px);
     }
 
-    /* Left panel: Script editor */
+    /* ===== Left: Editor + Preview split ===== */
     .editor-panel {
         flex: 1;
         display: flex;
@@ -36,7 +36,48 @@
     .editor-toolbar .project-title {
         font-weight: 600;
         font-size: 15px;
+    }
+
+    .editor-toolbar .spacer { flex: 1; }
+
+    .view-toggle {
+        display: flex;
+        background: var(--bg-card);
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+    }
+    .view-toggle button {
+        padding: 4px 12px;
+        font-size: 12px;
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+    }
+    .view-toggle button.active {
+        background: var(--accent);
+        color: white;
+    }
+
+    /* Split view container */
+    .editor-split {
         flex: 1;
+        display: flex;
+        min-height: 0;
+    }
+
+    .editor-split.view-raw .preview-pane { display: none; }
+    .editor-split.view-raw .raw-pane { flex: 1; }
+    .editor-split.view-preview .raw-pane { display: none; }
+    .editor-split.view-preview .preview-pane { flex: 1; }
+    .editor-split.view-split .raw-pane { flex: 1; border-right: 1px solid var(--border-color); }
+    .editor-split.view-split .preview-pane { flex: 1; }
+
+    .raw-pane {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
     }
 
     #script-editor {
@@ -47,7 +88,7 @@
         border: none;
         padding: 16px 20px;
         font-family: 'JetBrains Mono', 'Consolas', monospace;
-        font-size: 14px;
+        font-size: 13px;
         line-height: 1.6;
         resize: none;
         outline: none;
@@ -64,7 +105,113 @@
         flex-shrink: 0;
     }
 
-    /* Right panel: Actions */
+    /* Preview pane */
+    .preview-pane {
+        overflow-y: auto;
+        background: var(--bg-primary);
+    }
+    .preview-pane-inner {
+        padding: 16px;
+    }
+    .empty-preview {
+        color: var(--text-muted);
+        font-size: 14px;
+        text-align: center;
+        padding: 60px 20px;
+    }
+
+    /* ===== Segment Cards ===== */
+    .segment-card {
+        background: var(--bg-secondary);
+        border: 2px solid transparent;
+        border-radius: var(--radius);
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .segment-card:hover { border-color: rgba(59, 130, 246, 0.3); }
+    .segment-card.selected {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .segment-card-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .segment-card-header .seg-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+    .seg-label.hook { background: rgba(16, 185, 129, 0.15); color: var(--accent-success); }
+    .seg-label.objective { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
+    .seg-label.content { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
+    .seg-label.ivq { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+    .seg-label.summary { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
+    .seg-label.cta { background: rgba(16, 185, 129, 0.15); color: var(--accent-success); }
+
+    .segment-card-header .seg-card-title {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .segment-card-header .seg-card-dur {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    .segment-card-header .btn-ai-seg {
+        background: none;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 2px 8px;
+        font-size: 11px;
+        color: var(--text-muted);
+        cursor: pointer;
+    }
+    .segment-card-header .btn-ai-seg:hover { border-color: var(--accent); color: var(--accent); }
+
+    .segment-card-body {
+        padding: 12px 14px;
+        font-size: 13px;
+        line-height: 1.65;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .segment-card-body h2, .segment-card-body h3 { font-size: 14px; margin: 8px 0 4px; }
+    .segment-card-body p { margin: 4px 0; }
+    .segment-card-body pre {
+        background: var(--bg-card);
+        border-radius: 6px;
+        padding: 10px 12px;
+        overflow-x: auto;
+        font-size: 12px;
+        margin: 6px 0;
+    }
+    .segment-card-body code { font-family: 'JetBrains Mono', 'Consolas', monospace; }
+    .segment-card-body .screen-cue {
+        background: rgba(245, 158, 11, 0.12);
+        color: var(--accent-warning);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-family: monospace;
+        font-size: 12px;
+    }
+    .segment-card-body .marker {
+        background: rgba(59, 130, 246, 0.12);
+        color: var(--accent);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+
+    /* ===== Right panel: Actions ===== */
     .actions-panel {
         width: 380px;
         display: flex;
@@ -78,7 +225,6 @@
         padding: 16px;
         border-bottom: 1px solid var(--border-color);
     }
-
     .panel-section h3 {
         font-size: 14px;
         font-weight: 600;
@@ -94,7 +240,6 @@
         align-items: center;
         cursor: pointer;
     }
-
     .panel-header h3 { margin-bottom: 0; }
 
     .collapse-icon {
@@ -102,24 +247,13 @@
         font-size: 12px;
         transition: transform 0.2s;
     }
-
     .panel-section.collapsed .panel-body { display: none; }
     .panel-section.collapsed .collapse-icon { transform: rotate(-90deg); }
 
     /* Form rows */
-    .form-row {
-        display: flex;
-        gap: 12px;
-    }
-
+    .form-row { display: flex; gap: 12px; }
     .form-row .form-group { flex: 1; }
-
-    .form-hint {
-        font-size: 11px;
-        color: var(--text-muted);
-        margin-top: 2px;
-    }
-
+    .form-hint { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
     .required { color: var(--accent-danger); }
     .optional { color: var(--text-muted); font-weight: 400; font-size: 11px; }
 
@@ -134,15 +268,10 @@
         margin-top: 12px;
         font-size: 13px;
     }
-
     .gen-status.active { display: flex; }
 
-    /* Segment list */
-    .segment-list {
-        max-height: 300px;
-        overflow-y: auto;
-    }
-
+    /* Segment list in sidebar */
+    .segment-list { max-height: 300px; overflow-y: auto; }
     .segment-item {
         padding: 8px 12px;
         border-radius: var(--radius);
@@ -153,9 +282,7 @@
         align-items: center;
         gap: 8px;
     }
-
     .segment-item:hover { background: var(--bg-card); }
-
     .segment-item .seg-type {
         font-size: 10px;
         font-weight: 600;
@@ -164,37 +291,149 @@
         text-transform: uppercase;
         flex-shrink: 0;
     }
-
     .segment-item .seg-type.screencast { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
     .segment-item .seg-type.slide { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
     .segment-item .seg-type.ivq { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+    .segment-item .seg-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .segment-item .seg-duration { font-size: 11px; color: var(--text-muted); margin-left: auto; flex-shrink: 0; }
 
-    .segment-item .seg-title {
-        font-size: 13px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    /* ===== AI Helper Panel ===== */
+    .ai-helper-panel {
+        position: fixed;
+        right: 0;
+        top: 52px;
+        bottom: 0;
+        width: 340px;
+        background: var(--bg-secondary);
+        border-left: 1px solid var(--border-color);
+        box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
     }
+    .ai-helper-panel.open { transform: translateX(0); }
 
-    .segment-item .seg-duration {
-        font-size: 11px;
-        color: var(--text-muted);
-        margin-left: auto;
+    .ai-helper-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border-color);
+        background: var(--bg-card);
         flex-shrink: 0;
     }
+    .ai-helper-header h3 { margin: 0; font-size: 15px; }
+    .btn-close-ai {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 18px;
+        cursor: pointer;
+        padding: 2px 6px;
+    }
+    .btn-close-ai:hover { color: var(--text-primary); }
+
+    .ai-helper-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+    }
+    .ai-helper-body h4 {
+        margin: 18px 0 8px;
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .ai-helper-body h4:first-child { margin-top: 0; }
+
+    .selected-seg-info {
+        background: var(--bg-card);
+        padding: 10px 12px;
+        border-radius: 6px;
+        margin-bottom: 14px;
+        font-size: 13px;
+    }
+    .selected-seg-info .seg-info-label { color: var(--text-muted); }
+    .selected-seg-info .seg-info-name { font-weight: 600; color: var(--accent); }
+
+    .ai-btn-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+    }
+    .ai-btn {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-size: 12px;
+        color: var(--text-primary);
+        cursor: pointer;
+        text-align: left;
+        transition: border-color 0.15s, background 0.15s;
+    }
+    .ai-btn:hover { border-color: var(--accent); background: rgba(59, 130, 246, 0.06); }
+    .ai-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .custom-request textarea {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        background: var(--bg-card);
+        color: var(--text-primary);
+        font-size: 13px;
+        resize: vertical;
+        margin-bottom: 8px;
+    }
+
+    .ai-helper-status {
+        padding: 12px 16px;
+        background: var(--accent);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+    .ai-helper-status.hidden { display: none; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="workspace-layout">
-    <!-- Script Editor -->
+    <!-- Script Editor + Preview -->
     <div class="editor-panel">
         <div class="editor-toolbar">
             <span class="project-title">{{ project.name }}</span>
+            <span class="spacer"></span>
+            <div class="view-toggle">
+                <button onclick="setView('raw')" id="vt-raw">Raw</button>
+                <button onclick="setView('split')" id="vt-split" class="active">Split</button>
+                <button onclick="setView('preview')" id="vt-preview">Preview</button>
+            </div>
             <button class="btn btn-sm" id="btn-save" onclick="saveScript()">Save</button>
-            <button class="btn btn-sm btn-primary" id="btn-parse" onclick="parseScript()">Parse Segments</button>
+            <button class="btn btn-sm btn-primary" id="btn-parse" onclick="parseScript()">Parse</button>
         </div>
-        <textarea id="script-editor" placeholder="Write or generate your WWHAA+IVQ script here...&#10;&#10;## HOOK&#10;...&#10;## OBJECTIVE&#10;...&#10;## CONTENT&#10;...&#10;## IVQ&#10;...&#10;## SUMMARY&#10;...&#10;## CTA&#10;...">{{ project.script_raw or '' }}</textarea>
+
+        <div class="editor-split view-split" id="editor-split">
+            <!-- Raw editor -->
+            <div class="raw-pane">
+                <textarea id="script-editor" placeholder="Write or generate your WWHAA+IVQ script here...&#10;&#10;## HOOK&#10;...&#10;## OBJECTIVE&#10;...&#10;## CONTENT&#10;...&#10;## IVQ&#10;...&#10;## SUMMARY&#10;...&#10;## CTA&#10;...">{{ project.script_raw or '' }}</textarea>
+            </div>
+            <!-- Rendered preview -->
+            <div class="preview-pane">
+                <div class="preview-pane-inner" id="script-preview">
+                    <div class="empty-preview">Write or generate a script to see the preview</div>
+                </div>
+            </div>
+        </div>
+
         <div class="editor-status">
             <span id="word-count">0 words</span>
             <span id="save-status">Saved</span>
@@ -211,7 +450,6 @@
             </div>
             <div class="panel-body">
                 <form id="generatorForm" onsubmit="generateScript(event)">
-                    <!-- Topic -->
                     <div class="form-group">
                         <label>Topic <span class="required">*</span></label>
                         <textarea id="gen-topic" rows="2"
@@ -219,16 +457,14 @@
                         >{{ project.name }}</textarea>
                         <div class="form-hint">Be specific. Include key concepts, tools, and outcomes.</div>
                     </div>
-
-                    <!-- Duration + Style -->
                     <div class="form-row">
                         <div class="form-group">
                             <label>Duration</label>
                             <select id="gen-duration">
-                                <option value="3">3 min (Quick)</option>
-                                <option value="5" selected>5 min (Standard)</option>
-                                <option value="7">7 min (In-depth)</option>
-                                <option value="10">10 min (Full)</option>
+                                <option value="3">3 min</option>
+                                <option value="5" selected>5 min</option>
+                                <option value="7">7 min</option>
+                                <option value="10">10 min</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -240,15 +476,13 @@
                             </select>
                         </div>
                     </div>
-
-                    <!-- Environment + Audience -->
                     <div class="form-row">
                         <div class="form-group">
                             <label>Environment</label>
                             <select id="gen-environment">
-                                <option value="jupyter" selected>Jupyter Notebook</option>
+                                <option value="jupyter" selected>Jupyter</option>
                                 <option value="vscode">VS Code</option>
-                                <option value="terminal">Terminal / CLI</option>
+                                <option value="terminal">Terminal</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -260,33 +494,23 @@
                             </select>
                         </div>
                     </div>
-
-                    <!-- Learning Objectives (optional) -->
                     <div class="form-group">
                         <label>Learning Objectives <span class="optional">(optional)</span></label>
                         <textarea id="gen-objectives" rows="2"
-                            placeholder="By the end of this video, learners will be able to..."
-                        ></textarea>
-                        <div class="form-hint">Leave blank for AI to generate appropriate objectives.</div>
+                            placeholder="By the end of this video, learners will be able to..."></textarea>
                     </div>
-
-                    <!-- Sample Code (optional) -->
                     <div class="form-group">
                         <label>Sample Data / Code <span class="optional">(optional)</span></label>
-                        <textarea id="gen-sample" rows="3"
-                            placeholder="Paste any sample data, code snippets, or file contents..."
-                        ></textarea>
+                        <textarea id="gen-sample" rows="2"
+                            placeholder="Paste sample data, code snippets, or file contents..."></textarea>
                     </div>
-
-                    <!-- Notes (optional) -->
                     <div class="form-group">
                         <label>Additional Instructions <span class="optional">(optional)</span></label>
                         <textarea id="gen-notes" rows="2"
-                            placeholder="Any specific requirements, examples to include, or things to avoid..."
-                        ></textarea>
+                            placeholder="Any specific requirements or things to avoid..."></textarea>
                     </div>
 
-                    <!-- Coursera Metadata (optional) -->
+                    <!-- Coursera Metadata -->
                     <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
                         <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted);">Coursera Metadata <span class="optional">(optional)</span></label>
                     </div>
@@ -317,7 +541,6 @@
                         Generate Script with AI
                     </button>
                 </form>
-
                 <div class="gen-status" id="gen-status">
                     <div class="spinner"></div>
                     <span>Generating script...</span>
@@ -362,34 +585,290 @@
         </div>
     </div>
 </div>
+
+<!-- AI Helper Slide-in Panel -->
+<div class="ai-helper-panel" id="ai-helper-panel">
+    <div class="ai-helper-header">
+        <h3>AI Helpers</h3>
+        <button class="btn-close-ai" onclick="closeAIHelper()">&times;</button>
+    </div>
+    <div class="ai-helper-body">
+        <div class="selected-seg-info">
+            <span class="seg-info-label">Selected: </span>
+            <span class="seg-info-name" id="ai-selected-name">---</span>
+        </div>
+
+        <h4>Quick Fixes</h4>
+        <div class="ai-btn-grid">
+            <button class="ai-btn" onclick="aiAction('shorten')">Make Shorter</button>
+            <button class="ai-btn" onclick="aiAction('expand')">Expand / Add Detail</button>
+            <button class="ai-btn" onclick="aiAction('fix_tone')">Fix Tone</button>
+            <button class="ai-btn" onclick="aiAction('simplify')">Simplify Language</button>
+        </div>
+
+        <h4>Code</h4>
+        <div class="ai-btn-grid">
+            <button class="ai-btn" onclick="aiAction('improve_code_explanation')">Improve Explanation</button>
+            <button class="ai-btn" onclick="aiAction('add_output')">Add Output Blocks</button>
+            <button class="ai-btn" onclick="aiAction('fix_code')">Fix Code Errors</button>
+            <button class="ai-btn" onclick="aiAction('add_comments')">Add Comments</button>
+        </div>
+
+        <h4>Structure</h4>
+        <div class="ai-btn-grid">
+            <button class="ai-btn" onclick="aiAction('add_visual_cue')">Add Visual Cues</button>
+            <button class="ai-btn" onclick="aiAction('improve_transition')">Improve Transition</button>
+            <button class="ai-btn" onclick="aiAction('add_pause')">Add Pauses</button>
+        </div>
+
+        <h4>IVQ</h4>
+        <div class="ai-btn-grid">
+            <button class="ai-btn" onclick="aiAction('balance_ivq_options')">Balance Options</button>
+            <button class="ai-btn" onclick="aiAction('improve_ivq_feedback')">Improve Feedback</button>
+            <button class="ai-btn" onclick="aiAction('make_ivq_harder')">Make Harder</button>
+            <button class="ai-btn" onclick="aiAction('make_ivq_easier')">Make Easier</button>
+        </div>
+
+        <h4>Custom</h4>
+        <div class="custom-request">
+            <textarea id="custom-ai-request" rows="3"
+                placeholder="Describe what you want to change..."></textarea>
+            <button class="btn btn-primary" style="width: 100%;" onclick="aiAction('custom')">
+                Apply Custom Fix
+            </button>
+        </div>
+    </div>
+    <div class="ai-helper-status hidden" id="ai-helper-status">
+        <div class="spinner"></div>
+        <span>Applying fix...</span>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 const PROJECT_ID = '{{ project.id }}';
 const editor = document.getElementById('script-editor');
+let parsedSegments = [];
+let selectedSegIdx = null;
 
-// Word count
+// ===== View Toggle =====
+function setView(mode) {
+    const split = document.getElementById('editor-split');
+    split.className = 'editor-split view-' + mode;
+    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+    document.getElementById('vt-' + mode).classList.add('active');
+}
+
+// ===== Word Count =====
 editor.addEventListener('input', () => {
     const words = editor.value.trim().split(/\s+/).filter(w => w).length;
     document.getElementById('word-count').textContent = `${words} words (~${Math.round(words / 150)} min)`;
     document.getElementById('save-status').textContent = 'Unsaved';
+    debouncePreview();
 });
-
-// Initial word count
 editor.dispatchEvent(new Event('input'));
+
+// ===== Markdown Rendering =====
+if (typeof marked !== 'undefined') {
+    marked.setOptions({
+        highlight: function(code, lang) {
+            if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
+                return hljs.highlight(code, { language: lang }).value;
+            }
+            if (typeof hljs !== 'undefined') return hljs.highlightAuto(code).value;
+            return code;
+        },
+        breaks: true
+    });
+}
+
+function renderMd(text) {
+    if (typeof marked === 'undefined') {
+        // Fallback: basic escaping
+        return text.replace(/</g, '&lt;').replace(/\n/g, '<br>');
+    }
+    // Pre-process custom markers
+    let s = text
+        .replace(/\*\*\[(RUN CELL|TYPE|SHOW|PAUSE)\]\*\*/g, '<span class="marker">[$1]</span>')
+        .replace(/\[SCREEN:\s*([^\]]+)\]/g, '<span class="screen-cue">[SCREEN: $1]</span>');
+    return marked.parse(s);
+}
+
+// ===== Preview Rendering =====
+let previewTimer;
+function debouncePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(renderPreview, 400);
+}
+
+function renderPreview() {
+    const script = editor.value.trim();
+    const container = document.getElementById('script-preview');
+
+    if (!script) {
+        container.innerHTML = '<div class="empty-preview">Write or generate a script to see the preview</div>';
+        return;
+    }
+
+    // Split by ## sections
+    const sectionPattern = /^##\s+(HOOK|OBJECTIVE|CONTENT|IVQ|SUMMARY|CALL TO ACTION|CTA)(.*)$/gm;
+    const sections = [];
+    let match;
+    let lastIdx = 0;
+    let lastName = null;
+    let lastSubtitle = '';
+
+    // Skip metadata table at the start
+    const tableEnd = script.search(/^##\s+/m);
+    const scriptBody = tableEnd > 0 ? script.substring(tableEnd) : script;
+
+    // If there's a metadata table, render it first
+    const metaTable = tableEnd > 0 ? script.substring(0, tableEnd).trim() : '';
+
+    while ((match = sectionPattern.exec(scriptBody)) !== null) {
+        if (lastName !== null) {
+            sections.push({ name: lastName, subtitle: lastSubtitle, content: scriptBody.substring(lastIdx, match.index).trim() });
+        }
+        lastName = match[1];
+        lastSubtitle = match[2].trim().replace(/^[-:\s]+/, '');
+        lastIdx = match.index + match[0].length;
+    }
+    if (lastName !== null) {
+        sections.push({ name: lastName, subtitle: lastSubtitle, content: scriptBody.substring(lastIdx).trim() });
+    }
+
+    if (sections.length === 0) {
+        container.innerHTML = '<div class="empty-preview">No WWHAA sections detected. Use ## HOOK, ## OBJECTIVE, etc.</div>';
+        return;
+    }
+
+    let html = '';
+
+    // Render metadata table if present
+    if (metaTable) {
+        html += `<div style="margin-bottom: 16px; font-size: 13px; opacity: 0.7;">${renderMd(metaTable)}</div>`;
+    }
+
+    sections.forEach((sec, i) => {
+        const labelClass = sec.name.toLowerCase().replace(/\s+/g, '');
+        const selected = selectedSegIdx === i ? ' selected' : '';
+        const title = sec.subtitle || sec.name;
+        const words = sec.content.split(/\s+/).filter(w => w).length;
+        const secs = Math.round(words / 2.5);
+        const durStr = secs < 60 ? `~${secs}s` : `~${Math.floor(secs/60)}m ${secs%60}s`;
+
+        html += `<div class="segment-card${selected}" data-seg-idx="${i}" onclick="selectSegment(${i})">
+            <div class="segment-card-header">
+                <span class="seg-label ${labelClass}">${sec.name}</span>
+                <span class="seg-card-title">${title}</span>
+                <span class="seg-card-dur">${durStr}</span>
+                <button class="btn-ai-seg" onclick="event.stopPropagation(); selectSegment(${i}); openAIHelper()">AI</button>
+            </div>
+            <div class="segment-card-body">${renderMd(sec.content)}</div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+    // Store sections for AI helpers
+    window._previewSections = sections;
+}
+
+// ===== Segment Selection =====
+function selectSegment(idx) {
+    selectedSegIdx = idx;
+    document.querySelectorAll('.segment-card').forEach(c => c.classList.remove('selected'));
+    const card = document.querySelector(`[data-seg-idx="${idx}"]`);
+    if (card) card.classList.add('selected');
+}
+
+function openAIHelper() {
+    if (selectedSegIdx === null || !window._previewSections) return;
+    const sec = window._previewSections[selectedSegIdx];
+    document.getElementById('ai-selected-name').textContent = sec.name + (sec.subtitle ? ': ' + sec.subtitle : '');
+    document.getElementById('ai-helper-panel').classList.add('open');
+}
+
+function closeAIHelper() {
+    document.getElementById('ai-helper-panel').classList.remove('open');
+}
+
+// ===== AI Helper Actions =====
+function getSelectedSectionText() {
+    if (selectedSegIdx === null || !window._previewSections) return null;
+    const sec = window._previewSections[selectedSegIdx];
+    // Reconstruct the full section text including the header
+    return `## ${sec.name}${sec.subtitle ? ' - ' + sec.subtitle : ''}\n\n${sec.content}`;
+}
+
+function replaceSectionInEditor(idx, newText) {
+    const script = editor.value;
+    const sec = window._previewSections[idx];
+    // Build the original section header pattern
+    const headerPattern = new RegExp(
+        `## ${sec.name}[^\\n]*\\n[\\s\\S]*?(?=## (?:HOOK|OBJECTIVE|CONTENT|IVQ|SUMMARY|CALL TO ACTION|CTA)|$)`,
+        'i'
+    );
+    // Find and replace
+    const match = script.match(headerPattern);
+    if (match) {
+        const updated = script.replace(match[0], newText.trim() + '\n\n');
+        editor.value = updated;
+        editor.dispatchEvent(new Event('input'));
+    }
+}
+
+async function aiAction(action) {
+    const segText = getSelectedSectionText();
+    if (!segText) { showToast('Select a segment first', 'error'); return; }
+
+    const statusDiv = document.getElementById('ai-helper-status');
+    statusDiv.classList.remove('hidden');
+    document.querySelectorAll('.ai-btn').forEach(b => b.disabled = true);
+
+    try {
+        const customInstruction = action === 'custom'
+            ? document.getElementById('custom-ai-request').value
+            : '';
+
+        const data = await api('/api/ai/improve-segment', {
+            method: 'POST',
+            body: JSON.stringify({
+                segment_text: segText,
+                action: action,
+                custom_instruction: customInstruction
+            })
+        });
+
+        if (data.success) {
+            replaceSectionInEditor(selectedSegIdx, data.improved_segment);
+            renderPreview();
+            // Re-select
+            setTimeout(() => {
+                selectSegment(selectedSegIdx);
+            }, 100);
+            showToast(`Applied: ${action.replace(/_/g, ' ')}`);
+        }
+    } catch (err) {
+        showToast('AI error: ' + err.message, 'error');
+    } finally {
+        statusDiv.classList.add('hidden');
+        document.querySelectorAll('.ai-btn').forEach(b => b.disabled = false);
+    }
+}
+
+// ===== Existing Functions =====
 
 // Load existing segments
 {% if project.segments %}
-renderSegments({{ project.segments | tojson }});
+parsedSegments = {{ project.segments | tojson }};
+renderSegments(parsedSegments);
 {% endif %}
 
-// Set duration from project config
 {% if project.config and project.config.duration_minutes %}
 document.getElementById('gen-duration').value = '{{ project.config.duration_minutes }}';
 {% endif %}
 
-// Toggle collapsible sections
 function toggleSection(sectionId) {
     document.getElementById(sectionId).classList.toggle('collapsed');
 }
@@ -409,7 +888,6 @@ async function saveScript() {
 
 async function generateScript(e) {
     if (e) e.preventDefault();
-
     const topic = document.getElementById('gen-topic').value.trim();
     if (!topic) { showToast('Enter a topic', 'error'); return; }
 
@@ -419,7 +897,6 @@ async function generateScript(e) {
     btn.textContent = 'Generating...';
     status.classList.add('active');
 
-    // Collect all form fields
     const payload = {
         topic: topic,
         duration_minutes: parseInt(document.getElementById('gen-duration').value) || 5,
@@ -443,12 +920,8 @@ async function generateScript(e) {
         editor.value = data.script;
         editor.dispatchEvent(new Event('input'));
         showToast('Script generated');
-
-        // Auto-save and parse
         await saveScript();
         await parseScript();
-
-        // Collapse generator panel
         document.getElementById('generator-section').classList.add('collapsed');
     } catch (err) {
         showToast(err.message, 'error');
@@ -462,7 +935,6 @@ async function generateScript(e) {
 async function parseScript() {
     const text = editor.value.trim();
     if (!text) { showToast('No script to parse', 'error'); return; }
-
     const duration = parseInt(document.getElementById('gen-duration').value) || 5;
 
     try {
@@ -470,7 +942,9 @@ async function parseScript() {
             method: 'POST',
             body: JSON.stringify({ script_text: text, project_id: PROJECT_ID, duration_minutes: duration })
         });
+        parsedSegments = data.segments;
         renderSegments(data.segments);
+        renderPreview();
         showToast(`Parsed ${data.segments.length} segments`);
     } catch (err) {
         showToast(err.message, 'error');
@@ -483,7 +957,6 @@ function renderSegments(segments) {
         list.innerHTML = '<p style="color: var(--text-muted); font-size: 13px; text-align: center;">No segments</p>';
         return;
     }
-
     list.innerHTML = segments.map(s => `
         <div class="segment-item">
             <span class="seg-type ${s.section === 'IVQ' ? 'ivq' : s.type}">${s.section === 'IVQ' ? 'IVQ' : s.type}</span>
@@ -499,14 +972,10 @@ async function generateAudio() {
     btn.disabled = true;
     btn.textContent = 'Generating...';
     status.textContent = 'Generating audio for all segments...';
-
     const voice = document.getElementById('voice-select').value;
 
     try {
-        // Save script first
         await saveScript();
-
-        // Parse if not already
         const text = editor.value.trim();
         if (text) {
             const duration = parseInt(document.getElementById('gen-duration').value) || 5;
@@ -515,12 +984,10 @@ async function generateAudio() {
                 body: JSON.stringify({ script_text: text, project_id: PROJECT_ID, duration_minutes: duration })
             });
         }
-
         const data = await api('/api/audio/generate-all', {
             method: 'POST',
             body: JSON.stringify({ project_id: PROJECT_ID, voice })
         });
-
         const totalMin = (data.total_duration_seconds / 60).toFixed(1);
         status.textContent = `${data.segments_generated} segments, ${totalMin} min total`;
         showToast('Audio generated', 'success');
@@ -533,12 +1000,18 @@ async function generateAudio() {
     }
 }
 
-// Ctrl+S to save
+// Keyboard shortcuts
 document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         saveScript();
     }
+    if (e.key === 'Escape') {
+        closeAIHelper();
+    }
 });
+
+// Initial preview render
+setTimeout(renderPreview, 100);
 </script>
 {% endblock %}

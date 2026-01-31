@@ -428,6 +428,69 @@ def parse_script():
 
 
 # ============================================================================
+# AI HELPERS API
+# ============================================================================
+
+SEGMENT_IMPROVE_PROMPTS = {
+    'shorten': "Rewrite this script segment to be 20-30% shorter while keeping all key information. Maintain the same tone and format.",
+    'expand': "Expand this script segment with more detail, examples, or explanation. Add 20-30% more content. Keep the same tone.",
+    'fix_tone': "Rewrite this script segment to be more conversational and engaging. Use first-person where appropriate. Avoid academic tone.",
+    'simplify': "Simplify the language in this script segment. Use shorter sentences and simpler words. Keep technical accuracy.",
+    'improve_code_explanation': 'Improve the narration around the code in this segment. Explain WHAT the code does and WHY each line matters. Add "Notice..." and "Here\'s the key..." phrases.',
+    'add_output': "Add realistic **OUTPUT:** blocks after each code cell showing what the code would produce when run.",
+    'fix_code': "Fix any syntax errors in the Python code blocks. Ensure all code is valid and would actually run. Keep the same logic.",
+    'add_comments': "Add clear, helpful comments to the code blocks explaining what each section does. Don't over-comment obvious lines.",
+    'add_visual_cue': "Add [SCREEN: ...] visual cues to indicate what should be shown on screen during this segment. Add at least one per 60 seconds of content.",
+    'improve_transition': 'Improve the transition into and out of this segment. Add connecting phrases like "Now that we have...", "With that in place...".',
+    'add_pause': "Add **[PAUSE]** markers after important outputs or concepts to give viewers time to absorb the information.",
+    'balance_ivq_options': "Rewrite the IVQ options so they are all similar in length (within 10-15 characters of each other). Keep the same meanings.",
+    'improve_ivq_feedback': "Improve the feedback for each IVQ option. Explain WHY each wrong answer is wrong, not just that it's incorrect.",
+    'make_ivq_harder': "Make this IVQ question more challenging. Require deeper understanding or application, not just recall.",
+    'make_ivq_easier': "Make this IVQ question easier. Focus on basic understanding. Make one option clearly correct and others clearly different.",
+}
+
+SEGMENT_IMPROVE_SYSTEM = """You are an expert instructional designer improving a screencast \
+video script segment. Return ONLY the improved segment in the exact same markdown format. \
+Preserve all structure markers like ### headings, **[RUN CELL]** markers, **NARRATION:** blocks, \
+**OUTPUT:** blocks, [SCREEN: ...] cues, and code blocks. Do not add explanations outside the segment."""
+
+
+@app.route('/api/ai/improve-segment', methods=['POST'])
+def improve_segment():
+    """Use AI to improve a specific script segment."""
+    data = request.json or {}
+    segment_text = data.get('segment_text', '')
+    action = data.get('action', '')
+    custom_instruction = data.get('custom_instruction', '')
+
+    if not segment_text:
+        return jsonify({'error': 'segment_text is required'}), 400
+    if not action:
+        return jsonify({'error': 'action is required'}), 400
+
+    instruction = SEGMENT_IMPROVE_PROMPTS.get(action, custom_instruction)
+    if action == 'custom':
+        instruction = custom_instruction
+    if not instruction:
+        return jsonify({'error': 'Unknown action or empty custom instruction'}), 400
+
+    user_prompt = f"""{instruction}
+
+SEGMENT TO IMPROVE:
+---
+{segment_text}
+---
+
+Return ONLY the improved segment in the same format."""
+
+    try:
+        improved = ai_client.generate(SEGMENT_IMPROVE_SYSTEM, user_prompt)
+        return jsonify({'success': True, 'improved_segment': improved, 'action': action})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
 # AUDIO GENERATION API
 # ============================================================================
 
