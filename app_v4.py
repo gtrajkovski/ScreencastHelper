@@ -17,9 +17,10 @@ load_dotenv()
 
 from src.config import Config
 from src.ai.client import AIClient
-from src.ai.prompts import SCRIPT_GENERATOR
 from src.generators.tts_audio_generator import TTSAudioGenerator
 from src.generators.timeline_generator import TimelineGenerator
+from src.generators.v4_script_generator import generate_script as ai_generate_script
+from src.generators.v4_code_generator import generate_code as ai_generate_code
 
 app = Flask(__name__,
             template_folder='templates_v4',
@@ -334,73 +335,53 @@ def delete_project(project_id):
 
 @app.route('/api/generate/script', methods=['POST'])
 def generate_script():
-    """Generate a WWHAA video script via AI."""
+    """Generate a WWHAA video script via AI with full context."""
     data = request.json or {}
     topic = data.get('topic', '')
-    duration = data.get('duration_minutes', 5)
-    style = data.get('style', 'tutorial')
 
     if not topic:
         return jsonify({'error': 'Topic is required'}), 400
 
-    prompt = f"""Create a {duration}-minute video script about: {topic}
+    result = ai_generate_script(
+        ai_client=ai_client,
+        topic=topic,
+        duration_minutes=int(data.get('duration_minutes', 5)),
+        style=data.get('style', 'tutorial'),
+        environment=data.get('environment', 'jupyter'),
+        audience=data.get('audience', 'intermediate'),
+        learning_objectives=data.get('learning_objectives'),
+        sample_code=data.get('sample_code'),
+        notes=data.get('notes')
+    )
 
-Use this EXACT structure with markdown headers:
-
-## HOOK
-[30-60 seconds - Attention-grabbing opening, relatable problem]
-
-## OBJECTIVE
-[30-45 seconds - "By the end of this video, you'll be able to..." with 2-3 goals]
-
-## CONTENT
-[Main content - Break into logical sections]
-[Include code blocks with ```python fences]
-[Add [VISUAL CUE: description] markers for animations]
-
-## SUMMARY
-[30-45 seconds - Recap key points]
-
-## CTA
-[15-30 seconds - Call to action, what to do next]
-
-Style: {style}
-Include realistic Python code examples with outputs."""
-
-    try:
-        script = ai_client.generate(SCRIPT_GENERATOR, prompt)
-        return jsonify({'success': True, 'script': script})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    if result['success']:
+        return jsonify(result)
+    else:
+        return jsonify({'error': result['error']}), 500
 
 
 @app.route('/api/generate/code', methods=['POST'])
 def generate_code():
-    """Generate code for a segment via AI."""
+    """Generate code for a segment via AI with full context."""
     data = request.json or {}
     description = data.get('description', '')
-    language = data.get('language', 'python')
-    context = data.get('context', '')
 
     if not description:
         return jsonify({'error': 'Description is required'}), 400
 
-    prompt = f"""Generate {language} code for a screencast demo:
-Description: {description}
-Context: {context}
+    result = ai_generate_code(
+        ai_client=ai_client,
+        description=description,
+        language=data.get('language', 'python'),
+        context=data.get('context'),
+        environment=data.get('environment', 'jupyter'),
+        include_output=data.get('include_output', True)
+    )
 
-Return only the code, with comments explaining each step.
-Include realistic sample output where applicable."""
-
-    try:
-        code = ai_client.generate(
-            "You are a Python expert creating demo code for educational screencasts. "
-            "Write clean, well-commented code with realistic outputs.",
-            prompt
-        )
-        return jsonify({'success': True, 'code': code})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    if result['success']:
+        return jsonify(result)
+    else:
+        return jsonify({'error': result['error']}), 500
 
 
 @app.route('/api/parse/script', methods=['POST'])
