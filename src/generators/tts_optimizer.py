@@ -1,6 +1,7 @@
 """Optimize scripts for text-to-speech engines."""
 
 import re
+from pathlib import Path
 from typing import Dict, List, Tuple
 from ..config import Config
 
@@ -134,3 +135,85 @@ class TTSOptimizer:
         text = re.sub(r'(\w+)\s+and\s+(\w+)', r'\1, and \2', text)
 
         return text
+
+    def generate_narration_file(self, script: str, output_path: Path) -> Path:
+        """Generate a clean TTS narration file from a script.
+
+        Strips visual cues, section headers, code blocks, and markdown
+        formatting, then applies TTS optimizations.
+
+        Args:
+            script: Raw markdown script text.
+            output_path: Where to write the narration file.
+
+        Returns:
+            Path to the written file.
+        """
+        narration = script
+
+        # Remove visual cues
+        narration = re.sub(r'\[([^\]]+)\]', '', narration)
+
+        # Remove section headers
+        narration = re.sub(r'^#{1,3}\s+.+', '', narration, flags=re.MULTILINE)
+
+        # Remove code blocks
+        narration = re.sub(r'```[\s\S]*?```', '', narration)
+
+        # Remove markdown formatting
+        narration = re.sub(r'\*\*([^*]+)\*\*', r'\1', narration)  # Bold
+        narration = re.sub(r'\*([^*]+)\*', r'\1', narration)  # Italic
+
+        # Apply TTS replacements
+        narration = self.optimize(narration)
+
+        # Clean up whitespace
+        narration = re.sub(r'\n{3,}', '\n\n', narration)
+        narration = narration.strip()
+
+        # Add pause markers between paragraphs for ElevenLabs
+        narration = re.sub(r'\n\n', '\n\n[pause]\n\n', narration)
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(narration, encoding='utf-8')
+        return output_path
+
+    def extract_narration_segments(self, script: str) -> List[Dict]:
+        """Extract narration segments with timing estimates.
+
+        Args:
+            script: Raw markdown script text.
+
+        Returns:
+            List of dicts with type, narration, word_count, duration_seconds.
+        """
+        segments = []
+
+        parts = re.split(
+            r'^##\s*(HOOK|OBJECTIVE|CONTENT|SUMMARY|CALL TO ACTION)',
+            script, flags=re.MULTILINE | re.IGNORECASE,
+        )
+
+        current_type = None
+        for part in parts:
+            upper = part.strip().upper()
+            if upper in ('HOOK', 'OBJECTIVE', 'CONTENT', 'SUMMARY', 'CALL TO ACTION'):
+                current_type = upper
+            elif current_type and part.strip():
+                # Strip non-narration content
+                narration = re.sub(r'\[([^\]]+)\]', '', part)
+                narration = re.sub(r'```[\s\S]*?```', '', narration)
+                narration = re.sub(r'\*\*([^*]+)\*\*', r'\1', narration)
+                narration = re.sub(r'\*([^*]+)\*', r'\1', narration)
+                narration = self.optimize(narration.strip())
+
+                word_count = len(narration.split())
+                segments.append({
+                    'type': current_type,
+                    'narration': narration,
+                    'word_count': word_count,
+                    'duration_seconds': max(10, int(word_count / 2.5)),
+                })
+                current_type = None
+
+        return segments

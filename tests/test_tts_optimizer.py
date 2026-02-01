@@ -1,6 +1,7 @@
 """Tests for TTS optimizer."""
 
 import pytest
+from pathlib import Path
 from src.generators.tts_optimizer import TTSOptimizer
 
 
@@ -145,3 +146,82 @@ It achieves 95% accuracy using the sklearn API.
 
         # Python terms replaced
         assert "scikit-learn" in result
+
+
+class TestTTSNarrationExtraction:
+    """Tests for narration file generation and segment extraction."""
+
+    SCRIPT = """## HOOK
+Have you ever wondered about data quality?
+[SHOW SLIDE: Title]
+
+## OBJECTIVE
+By the end of this video, you'll understand validation.
+
+## CONTENT
+Let's look at an example.
+
+```python
+import pandas as pd
+```
+
+This code loads the library.
+
+## SUMMARY
+Today we learned about validation.
+"""
+
+    def test_generate_narration_file(self, tmp_path):
+        optimizer = TTSOptimizer()
+        output = tmp_path / "narration.txt"
+        result = optimizer.generate_narration_file(self.SCRIPT, output)
+        assert result == output
+        assert output.exists()
+        content = output.read_text()
+        # Visual cues should be removed
+        assert "[SHOW SLIDE" not in content
+        # Code blocks should be removed
+        assert "import pandas" not in content
+        # Section headers should be removed
+        assert "## HOOK" not in content
+
+    def test_narration_file_has_pause_markers(self, tmp_path):
+        optimizer = TTSOptimizer()
+        output = tmp_path / "narration.txt"
+        optimizer.generate_narration_file(self.SCRIPT, output)
+        content = output.read_text()
+        assert "[pause]" in content
+
+    def test_narration_file_creates_parent_dirs(self, tmp_path):
+        optimizer = TTSOptimizer()
+        output = tmp_path / "deep" / "nested" / "narration.txt"
+        optimizer.generate_narration_file(self.SCRIPT, output)
+        assert output.exists()
+
+    def test_extract_narration_segments(self):
+        optimizer = TTSOptimizer()
+        segments = optimizer.extract_narration_segments(self.SCRIPT)
+        assert len(segments) >= 3  # HOOK, OBJECTIVE, CONTENT, SUMMARY
+        types = [s["type"] for s in segments]
+        assert "HOOK" in types
+        assert "CONTENT" in types
+
+    def test_segment_word_counts(self):
+        optimizer = TTSOptimizer()
+        segments = optimizer.extract_narration_segments(self.SCRIPT)
+        for seg in segments:
+            assert seg["word_count"] > 0
+            assert seg["duration_seconds"] >= 10
+
+    def test_segments_have_no_visual_cues(self):
+        optimizer = TTSOptimizer()
+        segments = optimizer.extract_narration_segments(self.SCRIPT)
+        for seg in segments:
+            assert "[SHOW SLIDE" not in seg["narration"]
+
+    def test_segments_have_no_code_blocks(self):
+        optimizer = TTSOptimizer()
+        segments = optimizer.extract_narration_segments(self.SCRIPT)
+        for seg in segments:
+            assert "```" not in seg["narration"]
+            assert "import pandas" not in seg["narration"]

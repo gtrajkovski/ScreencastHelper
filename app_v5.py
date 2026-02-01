@@ -40,6 +40,13 @@ from src.generators.v4_script_generator import generate_script as ai_generate_sc
 from src.generators.v4_code_generator import generate_code as ai_generate_code
 from src.generators.tts_audio_generator import TTSAudioGenerator
 from src.generators.timeline_generator import TimelineGenerator
+from src.parsers.script_importer import ScriptImporter
+from src.generators.slide_generator import generate_slides_from_script
+from src.generators.notebook_generator import NotebookGenerator
+from src.generators.production_notes_generator import ProductionNotesGenerator
+from src.generators.tts_optimizer import TTSOptimizer
+from src.generators.package_exporter import PackageExporter
+from src.generators.python_demo_generator import PythonDemoGenerator
 
 app = Flask(__name__,
             template_folder='templates_v5',
@@ -1384,6 +1391,263 @@ def serve_recording(project_id, filename):
     if not file_path.exists():
         return jsonify({'error': 'Recording not found'}), 404
     return send_file(str(file_path), mimetype='video/webm')
+
+
+# ============================================================================
+# COURSERA PRODUCTION FEATURES
+# ============================================================================
+
+@app.route('/api/projects/<project_id>/import-script', methods=['POST'])
+def import_script(project_id):
+    """Import an existing video script file (.docx or .md)."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'No file selected'}), 400
+
+    try:
+        filename = safe_filename(file.filename)
+    except ValueError:
+        return jsonify({'error': 'Invalid filename'}), 400
+
+    # Save to temp location inside project dir
+    project_dir = project_store._project_dir(project_id)
+    temp_path = project_dir / filename
+    file.save(str(temp_path))
+
+    try:
+        importer = ScriptImporter()
+        if filename.lower().endswith('.docx'):
+            imported = importer.import_docx(temp_path)
+        elif filename.lower().endswith('.md'):
+            imported = importer.import_markdown(temp_path)
+        else:
+            temp_path.unlink(missing_ok=True)
+            return jsonify({'error': 'Unsupported file type. Use .docx or .md'}), 400
+
+        # Update project
+        project.raw_script = imported.raw_text
+        project.title = imported.title
+        project.target_duration = imported.duration_estimate
+        project.updated_at = datetime.now().isoformat()
+
+        # Parse into segments
+        segments = parse_script_to_segments(imported.raw_text)
+        project.segments = segments
+        project_store.save(project)
+
+        return jsonify({
+            'success': True,
+            'title': imported.title,
+            'duration': imported.duration_estimate,
+            'sections': len(imported.sections),
+            'code_blocks': len(imported.code_blocks),
+            'has_ivq': imported.ivq is not None,
+            'segments': [s.to_dict() for s in segments],
+        })
+    except Exception as e:
+        return jsonify({'error': f'Import failed: {str(e)}'}), 500
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+@app.route('/api/projects/<project_id>/generate-slides', methods=['POST'])
+def generate_slides(project_id):
+    """Generate slide images for the project."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if not project.raw_script:
+        return jsonify({'error': 'No script to generate slides from'}), 400
+
+    try:
+        importer = ScriptImporter()
+        script = importer._parse_markdown(project.raw_script)
+
+        output_dir = project_store._project_dir(project_id) / 'slides'
+        paths = generate_slides_from_script(script, output_dir)
+
+        return jsonify({
+            'success': True,
+            'slides_generated': len(paths) // 2,  # PNG + SVG pairs
+            'png_folder': str(output_dir / 'png'),
+            'svg_folder': str(output_dir / 'svg'),
+            'files': [p.name for p in paths],
+        })
+    except Exception as e:
+        return jsonify({'error': f'Slide generation failed: {str(e)}'}), 500
+
+
+@app.route('/api/projects/<project_id>/generate-notebook', methods=['POST'])
+def generate_notebook(project_id):
+    """Generate Jupyter notebook aligned to script."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if not project.raw_script:
+        return jsonify({'error': 'No script to generate notebook from'}), 400
+
+    try:
+        importer = ScriptImporter()
+        script = importer._parse_markdown(project.raw_script)
+
+        output_path = project_store._project_dir(project_id) / 'notebook' / 'demo.ipynb'
+        generator = NotebookGenerator()
+        result = generator.generate_from_script(script, output_path)
+
+        return jsonify({
+            'success': True,
+            'notebook_path': str(result.filepath),
+            'cell_count': result.cell_count,
+            'cell_mapping': result.cell_mapping,
+        })
+    except Exception as e:
+        return jsonify({'error': f'Notebook generation failed: {str(e)}'}), 500
+
+
+@app.route('/api/projects/<project_id>/generate-tts-narration', methods=['POST'])
+def generate_tts_narration(project_id):
+    """Generate clean TTS narration file for ElevenLabs."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if not project.raw_script:
+        return jsonify({'error': 'No script to extract narration from'}), 400
+
+    try:
+        optimizer = TTSOptimizer()
+        output_path = project_store._project_dir(project_id) / 'tts_narration' / 'narration.txt'
+        optimizer.generate_narration_file(project.raw_script, output_path)
+
+        segments = optimizer.extract_narration_segments(project.raw_script)
+        total_duration = sum(s['duration_seconds'] for s in segments)
+
+        return jsonify({
+            'success': True,
+            'narration_file': str(output_path),
+            'total_words': sum(s['word_count'] for s in segments),
+            'estimated_duration': f'{total_duration // 60}:{total_duration % 60:02d}',
+            'segments': segments,
+        })
+    except Exception as e:
+        return jsonify({'error': f'Narration generation failed: {str(e)}'}), 500
+
+
+@app.route('/api/projects/<project_id>/generate-production-notes', methods=['POST'])
+def generate_production_notes(project_id):
+    """Generate production notes document."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if not project.raw_script:
+        return jsonify({'error': 'No script to generate notes from'}), 400
+
+    try:
+        data = request.json or {}
+        fmt = data.get('format', 'docx')
+        if fmt not in ('docx', 'md'):
+            fmt = 'docx'
+
+        importer = ScriptImporter()
+        script = importer._parse_markdown(project.raw_script)
+
+        project_dir = project_store._project_dir(project_id)
+        generator = ProductionNotesGenerator()
+        output_path = generator.generate(script, project_dir, fmt=fmt)
+
+        return jsonify({
+            'success': True,
+            'filepath': str(output_path),
+            'format': fmt,
+        })
+    except Exception as e:
+        return jsonify({'error': f'Production notes generation failed: {str(e)}'}), 500
+
+
+@app.route('/api/projects/<project_id>/generate-demo-script', methods=['POST'])
+def generate_demo_script(project_id):
+    """Generate Python terminal demo script for screencast recording."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if not project.raw_script:
+        return jsonify({'error': 'No script to generate demo from'}), 400
+
+    try:
+        importer = ScriptImporter()
+        script = importer._parse_markdown(project.raw_script)
+
+        project_dir = project_store._project_dir(project_id)
+        output_dir = project_dir / 'demo_script'
+
+        generator = PythonDemoGenerator()
+        script_path = generator.generate_from_script(script, output_dir, project.title)
+
+        return jsonify({
+            'success': True,
+            'demo_script': str(script_path),
+            'output_dir': str(output_dir),
+            'instructions': 'Set FAST_MODE=True for testing, False for recording',
+        })
+    except Exception as e:
+        return jsonify({'error': f'Demo script generation failed: {str(e)}'}), 500
+
+
+@app.route('/api/projects/<project_id>/export-full-package', methods=['POST'])
+def export_full_package(project_id):
+    """Export complete video production package."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if not project.raw_script:
+        return jsonify({'error': 'No script to export'}), 400
+
+    try:
+        project_dir = project_store._project_dir(project_id)
+        output_dir = Path('output')
+        output_dir.mkdir(exist_ok=True)
+
+        exporter = PackageExporter()
+        package_dir = exporter.export_full_package(
+            project_id=project_id,
+            project_dir=project_dir,
+            output_dir=output_dir,
+            video_title=project.title,
+            raw_script=project.raw_script,
+        )
+
+        data = request.json or {}
+        if data.get('create_zip', True):
+            zip_path = exporter.export_as_zip(package_dir)
+            return send_file(
+                str(zip_path), mimetype='application/zip',
+                as_attachment=True,
+                download_name=f'{sanitize_filename(project.title)}.zip',
+            )
+
+        contents = [
+            str(f.relative_to(package_dir))
+            for f in package_dir.rglob('*') if f.is_file()
+        ]
+        return jsonify({
+            'success': True,
+            'package_dir': str(package_dir),
+            'contents': contents,
+        })
+    except Exception as e:
+        return jsonify({'error': f'Export failed: {str(e)}'}), 500
 
 
 # ============================================================================
