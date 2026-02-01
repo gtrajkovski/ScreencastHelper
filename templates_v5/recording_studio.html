@@ -1,0 +1,785 @@
+{% extends "base.html" %}
+
+{% block title %}Recording Studio — {{ project.name }}{% endblock %}
+
+{% block nav_items %}
+<a href="/dashboard" class="nav-link">Dashboard</a>
+<a href="/workspace/{{ project.id }}" class="nav-link">Workspace</a>
+<a href="/studio/{{ project.id }}" class="nav-link active">Studio</a>
+{% endblock %}
+
+{% block head %}
+<style>
+/* ---- Layout ---- */
+.studio-layout {
+    display: flex;
+    height: calc(100vh - 48px);
+    overflow: hidden;
+}
+.studio-sidebar {
+    width: 260px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+.studio-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ---- Sidebar ---- */
+.sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+.sidebar-header h3 { margin: 0 0 8px; font-size: 14px; }
+.mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+}
+.mode-btn:hover { background: var(--bg-tertiary); }
+.mode-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+.mode-btn .mode-icon { font-size: 16px; width: 20px; text-align: center; }
+
+.sidebar-cues {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+.sidebar-cues h4 {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 8px 4px 4px;
+}
+.cue-item {
+    padding: 6px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    margin-bottom: 2px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cue-item:hover { background: var(--bg-tertiary); }
+.cue-item.active { background: var(--bg-tertiary); border-left-color: var(--accent); }
+.cue-item.narration { border-left-color: #3b82f6; }
+.cue-item.code_action { border-left-color: #10b981; }
+.cue-item.visual_cue { border-left-color: #f59e0b; }
+.cue-item.pause { border-left-color: #6b7280; }
+
+.sidebar-footer {
+    padding: 12px;
+    border-top: 1px solid var(--border-color);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ---- Toolbar ---- */
+.studio-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+.studio-toolbar .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 3px 10px;
+    border-radius: 4px;
+}
+.studio-toolbar .spacer { flex: 1; }
+.studio-toolbar .timer {
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.ctrl-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+}
+.ctrl-btn:hover { background: var(--bg-tertiary); }
+.ctrl-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+.ctrl-btn.primary:hover { opacity: 0.9; }
+.ctrl-btn.danger { background: #ef4444; color: white; border-color: #ef4444; }
+
+/* ---- Mode Views ---- */
+.mode-view { display: none; flex: 1; overflow: hidden; }
+.mode-view.active { display: flex; flex-direction: column; }
+
+/* Teleprompter */
+.teleprompter-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 40px 80px;
+    background: #0a0a0a;
+    color: #f0f0f0;
+    scroll-behavior: smooth;
+}
+.teleprompter-container.mirrored { transform: scaleX(-1); }
+.tp-line {
+    margin-bottom: 0.5em;
+    opacity: 0.4;
+    transition: opacity 0.3s, color 0.3s, font-size 0.2s;
+}
+.tp-line.current { opacity: 1; color: #ffffff; font-size: 1.1em; }
+.tp-line.done { opacity: 0.2; }
+.tp-line.code-cue { color: #10b981; font-family: monospace; font-size: 0.9em; }
+.tp-line.visual-cue { color: #f59e0b; font-style: italic; }
+.tp-line.pause-cue { color: #6b7280; text-align: center; letter-spacing: 2px; }
+
+.tp-settings {
+    display: flex;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    align-items: center;
+    flex-wrap: wrap;
+}
+.tp-settings label {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.tp-settings input[type="range"] { width: 100px; }
+.tp-settings input[type="checkbox"] { accent-color: var(--accent); }
+
+/* Cue System */
+.cue-display {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+.cue-card {
+    max-width: 800px;
+    width: 100%;
+    padding: 40px;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 2px solid var(--border-color);
+    text-align: center;
+}
+.cue-card .cue-type-badge {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 3px 12px;
+    border-radius: 12px;
+    display: inline-block;
+    margin-bottom: 16px;
+}
+.cue-type-badge.narration { background: #3b82f620; color: #3b82f6; }
+.cue-type-badge.code_action { background: #10b98120; color: #10b981; }
+.cue-type-badge.visual_cue { background: #f59e0b20; color: #f59e0b; }
+.cue-type-badge.pause { background: #6b728020; color: #6b7280; }
+.cue-card .cue-text {
+    font-size: 24px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+    white-space: pre-wrap;
+}
+.cue-card .cue-notes {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+.cue-nav {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    justify-content: center;
+}
+.cue-progress {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 12px;
+}
+
+/* Rehearsal */
+.rehearsal-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    overflow-y: auto;
+}
+.rehearsal-timer {
+    text-align: center;
+    padding: 32px;
+}
+.rehearsal-timer .big-time {
+    font-family: monospace;
+    font-size: 72px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.rehearsal-timer .pace-indicator {
+    font-size: 18px;
+    margin-top: 8px;
+    padding: 4px 16px;
+    border-radius: 16px;
+    display: inline-block;
+}
+.pace-indicator.good { background: #10b98120; color: #10b981; }
+.pace-indicator.fast { background: #f59e0b20; color: #f59e0b; }
+.pace-indicator.slow { background: #ef444420; color: #ef4444; }
+
+.rehearsal-history {
+    margin-top: 24px;
+}
+.rehearsal-history h3 { font-size: 14px; margin-bottom: 12px; }
+.rehearsal-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 13px;
+}
+.rehearsal-row .run-num { font-weight: 600; width: 40px; }
+.rehearsal-row .duration { font-family: monospace; }
+
+/* Timeline */
+.timeline-container {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: auto;
+    padding: 16px;
+}
+.timeline-track {
+    margin-bottom: 16px;
+}
+.timeline-track-header {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+.timeline-track-bar {
+    display: flex;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+    min-height: 32px;
+    position: relative;
+}
+.timeline-event {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    border-radius: 3px;
+    font-size: 10px;
+    padding: 2px 6px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+.timeline-event.narration { background: #3b82f630; border: 1px solid #3b82f660; color: #93c5fd; }
+.timeline-event.code { background: #10b98130; border: 1px solid #10b98160; color: #6ee7b7; }
+.timeline-event.visual { background: #f59e0b30; border: 1px solid #f59e0b60; color: #fcd34d; }
+.timeline-ruler {
+    display: flex;
+    margin-bottom: 8px;
+    font-size: 10px;
+    color: var(--text-muted);
+    position: relative;
+    height: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+.timeline-tick {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="studio-layout">
+    <!-- Sidebar -->
+    <div class="studio-sidebar">
+        <div class="sidebar-header">
+            <h3>Recording Studio</h3>
+            <div class="mode-selector">
+                <button class="mode-btn active" data-mode="teleprompter" onclick="setMode('teleprompter')">
+                    <span class="mode-icon">&#128220;</span> Teleprompter
+                </button>
+                <button class="mode-btn" data-mode="cue_system" onclick="setMode('cue_system')">
+                    <span class="mode-icon">&#127916;</span> Cue System
+                </button>
+                <button class="mode-btn" data-mode="rehearsal" onclick="setMode('rehearsal')">
+                    <span class="mode-icon">&#9202;</span> Rehearsal
+                </button>
+                <button class="mode-btn" data-mode="timeline" onclick="setMode('timeline')">
+                    <span class="mode-icon">&#128200;</span> Timeline
+                </button>
+            </div>
+        </div>
+        <div class="sidebar-cues" id="sidebar-cues">
+            <p style="padding: 12px; color: var(--text-muted); font-size: 12px;">
+                Generate a session to see cues here.
+            </p>
+        </div>
+        <div class="sidebar-footer">
+            <div id="session-info">No session loaded</div>
+        </div>
+    </div>
+
+    <!-- Main area -->
+    <div class="studio-main">
+        <div class="studio-toolbar">
+            <span class="section-label" id="current-section">—</span>
+            <div class="spacer"></div>
+            <span class="timer" id="studio-timer">00:00</span>
+            <button class="ctrl-btn" id="btn-generate" onclick="generateSession()">Generate Session</button>
+            <button class="ctrl-btn primary" id="btn-start" onclick="startAction()" disabled>Start</button>
+            <button class="ctrl-btn danger" id="btn-stop" onclick="stopAction()" style="display:none;">Stop</button>
+        </div>
+
+        <!-- Teleprompter View -->
+        <div class="mode-view active" id="view-teleprompter">
+            <div class="teleprompter-container" id="teleprompter-scroll"></div>
+            <div class="tp-settings">
+                <label>Font Size
+                    <input type="range" min="16" max="64" value="32" id="tp-font-size"
+                           oninput="updateTpSettings()">
+                    <span id="tp-font-size-val">32px</span>
+                </label>
+                <label>Speed
+                    <input type="range" min="0.5" max="3" step="0.1" value="1" id="tp-speed"
+                           oninput="updateTpSettings()">
+                    <span id="tp-speed-val">1.0x</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="tp-mirror" onchange="updateTpSettings()"> Mirror
+                </label>
+                <label>
+                    <input type="checkbox" id="tp-highlight" checked onchange="updateTpSettings()"> Highlight
+                </label>
+                <label>
+                    <input type="checkbox" id="tp-auto-scroll" checked onchange="updateTpSettings()"> Auto-scroll
+                </label>
+            </div>
+        </div>
+
+        <!-- Cue System View -->
+        <div class="mode-view" id="view-cue_system">
+            <div class="cue-display" id="cue-display">
+                <div class="cue-card" id="cue-card">
+                    <div class="cue-type-badge narration" id="cue-badge">NARRATION</div>
+                    <div class="cue-text" id="cue-text">Generate a session to start</div>
+                    <div class="cue-notes" id="cue-notes"></div>
+                </div>
+                <div class="cue-nav">
+                    <button class="ctrl-btn" onclick="prevCue()">&larr; Previous</button>
+                    <button class="ctrl-btn primary" onclick="nextCue()">Next &rarr;</button>
+                </div>
+                <div class="cue-progress" id="cue-progress">— / —</div>
+            </div>
+        </div>
+
+        <!-- Rehearsal View -->
+        <div class="mode-view" id="view-rehearsal">
+            <div class="rehearsal-container">
+                <div class="rehearsal-timer">
+                    <div class="big-time" id="rehearsal-time">00:00</div>
+                    <div class="pace-indicator good" id="pace-indicator">Ready</div>
+                </div>
+                <div style="text-align:center; margin-top: 16px;">
+                    <button class="ctrl-btn primary" id="btn-rehearsal-start" onclick="startRehearsal()">Start Rehearsal</button>
+                    <button class="ctrl-btn danger" id="btn-rehearsal-stop" onclick="stopRehearsal()" style="display:none;">Finish</button>
+                </div>
+                <div class="rehearsal-history" id="rehearsal-history">
+                    <h3>Rehearsal History</h3>
+                    <div id="rehearsal-list">
+                        <p style="color: var(--text-muted); font-size: 13px;">No rehearsals yet.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline View -->
+        <div class="mode-view" id="view-timeline">
+            <div class="timeline-container" id="timeline-container">
+                <p style="color: var(--text-muted);">Generate a session to see the timeline.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PROJECT_ID = '{{ project.id }}';
+let session = null;
+let currentCueIdx = 0;
+let currentMode = 'teleprompter';
+let timerInterval = null;
+let timerStart = null;
+let rehearsalRunning = false;
+
+// ---- Mode switching ----
+function setMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    document.querySelectorAll('.mode-view').forEach(v => v.classList.toggle('active', v.id === 'view-' + mode));
+
+    if (session) {
+        fetch(`/api/projects/${PROJECT_ID}/recording-session/mode`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mode: mode}),
+        });
+    }
+}
+
+// ---- Generate session ----
+async function generateSession() {
+    const btn = document.getElementById('btn-generate');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    try {
+        const resp = await api(`/api/projects/${PROJECT_ID}/recording-session`, {
+            method: 'POST',
+            body: JSON.stringify({mode: currentMode}),
+        });
+        session = resp.session;
+        renderSidebarCues();
+        renderTeleprompter();
+        renderTimeline();
+        currentCueIdx = 0;
+        renderCurrentCue();
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('session-info').textContent =
+            `${session.cues.length} cues | ~${formatTime(session.total_duration_estimate)}`;
+        showToast('Session generated', 'success');
+    } catch (e) {
+        showToast(e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Session';
+    }
+}
+
+// ---- Sidebar cues ----
+function renderSidebarCues() {
+    if (!session) return;
+    const el = document.getElementById('sidebar-cues');
+    let html = '';
+    let lastSection = '';
+    for (let i = 0; i < session.cues.length; i++) {
+        const c = session.cues[i];
+        if (c.section !== lastSection) {
+            html += `<h4>${c.section || 'Preamble'}</h4>`;
+            lastSection = c.section;
+        }
+        const active = i === currentCueIdx ? 'active' : '';
+        const preview = c.text.substring(0, 50) + (c.text.length > 50 ? '...' : '');
+        html += `<div class="cue-item ${c.cue_type} ${active}" data-idx="${i}" onclick="goToCue(${i})">${preview}</div>`;
+    }
+    el.innerHTML = html;
+}
+
+function highlightSidebarCue(idx) {
+    document.querySelectorAll('.cue-item').forEach((el, i) => {
+        el.classList.toggle('active', i === idx);
+    });
+}
+
+// ---- Teleprompter ----
+function renderTeleprompter() {
+    if (!session) return;
+    const container = document.getElementById('teleprompter-scroll');
+    let html = '';
+    for (let i = 0; i < session.cues.length; i++) {
+        const c = session.cues[i];
+        let cls = 'tp-line';
+        if (c.cue_type === 'code_action') cls += ' code-cue';
+        else if (c.cue_type === 'visual_cue') cls += ' visual-cue';
+        else if (c.cue_type === 'pause') cls += ' pause-cue';
+        if (i === 0) cls += ' current';
+        html += `<div class="${cls}" data-tp-idx="${i}" id="tp-line-${i}">${escapeHtml(c.text)}</div>`;
+    }
+    container.innerHTML = html;
+    updateTpSettings();
+}
+
+function advanceTeleprompter(idx) {
+    document.querySelectorAll('.tp-line').forEach((el, i) => {
+        el.classList.remove('current', 'done');
+        if (i < idx) el.classList.add('done');
+        else if (i === idx) el.classList.add('current');
+    });
+    const line = document.getElementById(`tp-line-${idx}`);
+    if (line && document.getElementById('tp-auto-scroll').checked) {
+        line.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
+}
+
+function updateTpSettings() {
+    const container = document.getElementById('teleprompter-scroll');
+    const fontSize = document.getElementById('tp-font-size').value;
+    const mirror = document.getElementById('tp-mirror').checked;
+
+    container.style.fontSize = fontSize + 'px';
+    container.style.lineHeight = '1.8';
+    container.classList.toggle('mirrored', mirror);
+
+    document.getElementById('tp-font-size-val').textContent = fontSize + 'px';
+    document.getElementById('tp-speed-val').textContent = parseFloat(document.getElementById('tp-speed').value).toFixed(1) + 'x';
+}
+
+// ---- Cue System ----
+function renderCurrentCue() {
+    if (!session || !session.cues.length) return;
+    const c = session.cues[currentCueIdx];
+    document.getElementById('cue-badge').className = 'cue-type-badge ' + c.cue_type;
+    document.getElementById('cue-badge').textContent = c.cue_type.replace('_', ' ').toUpperCase();
+    document.getElementById('cue-text').textContent = c.text;
+    document.getElementById('cue-notes').textContent = c.notes || '';
+    document.getElementById('cue-progress').textContent = `${currentCueIdx + 1} / ${session.cues.length}`;
+    document.getElementById('current-section').textContent = c.section || '—';
+    highlightSidebarCue(currentCueIdx);
+    advanceTeleprompter(currentCueIdx);
+}
+
+function nextCue() {
+    if (!session) return;
+    if (currentCueIdx < session.cues.length - 1) {
+        currentCueIdx++;
+        renderCurrentCue();
+    }
+}
+
+function prevCue() {
+    if (!session) return;
+    if (currentCueIdx > 0) {
+        currentCueIdx--;
+        renderCurrentCue();
+    }
+}
+
+function goToCue(idx) {
+    if (!session) return;
+    currentCueIdx = idx;
+    renderCurrentCue();
+}
+
+// ---- Timer ----
+function startTimer() {
+    timerStart = Date.now();
+    timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - timerStart) / 1000;
+        document.getElementById('studio-timer').textContent = formatTime(elapsed);
+    }, 100);
+}
+
+function stopTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    const elapsed = timerStart ? (Date.now() - timerStart) / 1000 : 0;
+    timerStart = null;
+    return elapsed;
+}
+
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// ---- Start / Stop ----
+function startAction() {
+    startTimer();
+    currentCueIdx = 0;
+    if (session) renderCurrentCue();
+    document.getElementById('btn-start').style.display = 'none';
+    document.getElementById('btn-stop').style.display = '';
+}
+
+function stopAction() {
+    const elapsed = stopTimer();
+    document.getElementById('btn-start').style.display = '';
+    document.getElementById('btn-stop').style.display = 'none';
+    showToast(`Session ended — ${formatTime(elapsed)}`, 'info');
+}
+
+// ---- Rehearsal ----
+async function startRehearsal() {
+    if (!session) {
+        showToast('Generate a session first', 'error');
+        return;
+    }
+    rehearsalRunning = true;
+    document.getElementById('btn-rehearsal-start').style.display = 'none';
+    document.getElementById('btn-rehearsal-stop').style.display = '';
+    timerStart = Date.now();
+    timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - timerStart) / 1000;
+        document.getElementById('rehearsal-time').textContent = formatTime(elapsed);
+        // Update pace
+        const ratio = elapsed / session.total_duration_estimate;
+        const indicator = document.getElementById('pace-indicator');
+        if (ratio < 0.85) {
+            indicator.textContent = 'Too fast';
+            indicator.className = 'pace-indicator fast';
+        } else if (ratio > 1.15) {
+            indicator.textContent = 'Too slow';
+            indicator.className = 'pace-indicator slow';
+        } else {
+            indicator.textContent = 'Good pace';
+            indicator.className = 'pace-indicator good';
+        }
+    }, 200);
+}
+
+async function stopRehearsal() {
+    rehearsalRunning = false;
+    const elapsed = stopTimer();
+    document.getElementById('btn-rehearsal-start').style.display = '';
+    document.getElementById('btn-rehearsal-stop').style.display = 'none';
+
+    try {
+        const resp = await api(`/api/projects/${PROJECT_ID}/recording-session/rehearsal/complete`, {
+            method: 'POST',
+            body: JSON.stringify({
+                actual_duration: elapsed,
+                section_timings: [],
+                notes: '',
+            }),
+        });
+        renderRehearsalHistory(resp.rehearsal);
+        showToast(`Rehearsal done: ${resp.rehearsal.pace_feedback}`, 'success');
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+function renderRehearsalHistory(latest) {
+    if (!session) return;
+    const list = document.getElementById('rehearsal-list');
+    const existing = list.innerHTML.includes('No rehearsals') ? '' : list.innerHTML;
+    const ratio = latest.pace_ratio;
+    const cls = ratio < 0.85 ? 'fast' : (ratio > 1.15 ? 'slow' : 'good');
+    const row = `<div class="rehearsal-row">
+        <span class="run-num">#${session.rehearsals ? session.rehearsals.length + 1 : 1}</span>
+        <span class="duration">${formatTime(latest.actual_duration)}</span>
+        <span>target: ${formatTime(latest.target_duration)}</span>
+        <span class="pace-indicator ${cls}" style="font-size:12px">${latest.pace_feedback}</span>
+    </div>`;
+    list.innerHTML = row + existing;
+    if (session.rehearsals) session.rehearsals.push(latest);
+    else session.rehearsals = [latest];
+}
+
+// ---- Timeline ----
+function renderTimeline() {
+    if (!session || !session.timeline_tracks.length) return;
+    const container = document.getElementById('timeline-container');
+    const totalDur = session.total_duration_estimate || 1;
+    const pxPerSecond = 4;
+    const totalWidth = Math.max(totalDur * pxPerSecond, 600);
+
+    let html = `<div class="timeline-ruler" style="width:${totalWidth}px">`;
+    for (let t = 0; t <= totalDur; t += 30) {
+        const left = (t / totalDur) * 100;
+        html += `<span class="timeline-tick" style="left:${left}%">${formatTime(t)}</span>`;
+    }
+    html += '</div>';
+
+    for (const track of session.timeline_tracks) {
+        html += `<div class="timeline-track">
+            <div class="timeline-track-header">${track.name}</div>
+            <div class="timeline-track-bar" style="width:${totalWidth}px;height:36px">`;
+        for (const ev of track.events) {
+            const left = (ev.start_time / totalDur) * 100;
+            const width = Math.max((ev.duration / totalDur) * 100, 0.5);
+            html += `<div class="timeline-event ${track.track_type}" style="left:${left}%;width:${width}%"
+                          title="${ev.text}">${ev.text}</div>`;
+        }
+        html += '</div></div>';
+    }
+    container.innerHTML = html;
+}
+
+// ---- Keyboard shortcuts ----
+document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        nextCue();
+    } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        prevCue();
+    }
+});
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ---- Init: try to load existing session ----
+(async function init() {
+    try {
+        const resp = await fetch(`/api/projects/${PROJECT_ID}/recording-session`);
+        if (resp.ok) {
+            const data = await resp.json();
+            session = data.session;
+            renderSidebarCues();
+            renderTeleprompter();
+            renderTimeline();
+            renderCurrentCue();
+            document.getElementById('btn-start').disabled = false;
+            document.getElementById('session-info').textContent =
+                `${session.cues.length} cues | ~${formatTime(session.total_duration_estimate)}`;
+        }
+    } catch (_) {}
+})();
+</script>
+{% endblock %}

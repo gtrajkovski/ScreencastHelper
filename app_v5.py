@@ -53,6 +53,10 @@ from src.ai.script_improver import ScriptImprover
 from src.generators.dataset_generator import (
     ScriptResultExtractor, DatasetGenerator, DatasetValidator, DatasetAuditor,
 )
+from src.recording.models import (
+    RecordingSession, RecordingMode, TeleprompterSettings, RehearsalResult,
+)
+from src.recording.session_generator import RecordingSessionGenerator
 
 app = Flask(__name__,
             template_folder='templates_v5',
@@ -167,6 +171,14 @@ def recorder_page(project_id):
     if not project:
         return redirect(url_for('dashboard'))
     return render_template('segment_recorder.html', project=project_to_api(project))
+
+
+@app.route('/studio/<project_id>')
+def recording_studio_page(project_id):
+    project = project_store.load(project_id)
+    if not project:
+        return redirect(url_for('dashboard'))
+    return render_template('recording_studio.html', project=project_to_api(project))
 
 
 # ============================================================================
@@ -2136,6 +2148,136 @@ def export_full_package(project_id):
         })
     except Exception as e:
         return jsonify({'error': f'Export failed: {str(e)}'}), 500
+
+
+# ============================================================================
+# RECORDING STUDIO API
+# ============================================================================
+
+# In-memory session store (one session per project)
+recording_sessions = {}  # project_id -> RecordingSession
+
+
+@app.route('/api/projects/<project_id>/recording-session', methods=['POST'])
+def generate_recording_session(project_id):
+    """Generate a recording session from the project script."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if not project.raw_script:
+        return jsonify({'error': 'No script to generate session from'}), 400
+
+    data = request.json or {}
+    mode_str = data.get('mode', 'teleprompter')
+    try:
+        mode = RecordingMode(mode_str)
+    except ValueError:
+        mode = RecordingMode.TELEPROMPTER
+
+    generator = RecordingSessionGenerator()
+    session = generator.generate_session(
+        project_id=project_id,
+        raw_script=project.raw_script,
+        segments=[s.to_dict() for s in project.segments],
+        mode=mode,
+    )
+
+    recording_sessions[project_id] = session
+    return jsonify({'success': True, 'session': session.to_dict()})
+
+
+@app.route('/api/projects/<project_id>/recording-session', methods=['GET'])
+def get_recording_session(project_id):
+    """Get the current recording session for a project."""
+    session = recording_sessions.get(project_id)
+    if not session:
+        return jsonify({'error': 'No recording session found. Generate one first.'}), 404
+    return jsonify({'session': session.to_dict()})
+
+
+@app.route('/api/projects/<project_id>/recording-session/mode', methods=['PUT'])
+def set_recording_mode(project_id):
+    """Change the recording mode for the current session."""
+    session = recording_sessions.get(project_id)
+    if not session:
+        return jsonify({'error': 'No recording session found'}), 404
+
+    data = request.json or {}
+    mode_str = data.get('mode', '')
+    if not mode_str:
+        return jsonify({'error': 'mode is required'}), 400
+
+    try:
+        session.mode = RecordingMode(mode_str)
+    except ValueError:
+        return jsonify({'error': f'Invalid mode: {mode_str}'}), 400
+
+    return jsonify({'success': True, 'mode': session.mode.value})
+
+
+@app.route('/api/projects/<project_id>/recording-session/teleprompter', methods=['PUT'])
+def update_teleprompter_settings(project_id):
+    """Update teleprompter settings for the recording session."""
+    session = recording_sessions.get(project_id)
+    if not session:
+        return jsonify({'error': 'No recording session found'}), 404
+
+    data = request.json or {}
+    settings = session.teleprompter_settings
+
+    for field_name in ('font_size', 'scroll_speed', 'line_height', 'countdown_seconds'):
+        if field_name in data:
+            setattr(settings, field_name, data[field_name])
+    for field_name in ('mirror', 'highlight_current', 'auto_scroll'):
+        if field_name in data:
+            setattr(settings, field_name, bool(data[field_name]))
+
+    return jsonify({'success': True, 'teleprompter_settings': settings.to_dict()})
+
+
+@app.route('/api/projects/<project_id>/recording-session/rehearsal', methods=['POST'])
+def start_rehearsal(project_id):
+    """Start a rehearsal run — returns session info for the client to time."""
+    session = recording_sessions.get(project_id)
+    if not session:
+        return jsonify({'error': 'No recording session found'}), 404
+
+    return jsonify({
+        'success': True,
+        'rehearsal_id': RehearsalResult().id,
+        'total_cues': len(session.cues),
+        'target_duration': session.total_duration_estimate,
+        'cues': [c.to_dict() for c in session.cues],
+    })
+
+
+@app.route('/api/projects/<project_id>/recording-session/rehearsal/complete', methods=['POST'])
+def complete_rehearsal(project_id):
+    """Record the results of a completed rehearsal."""
+    session = recording_sessions.get(project_id)
+    if not session:
+        return jsonify({'error': 'No recording session found'}), 404
+
+    data = request.json or {}
+    actual_duration = data.get('actual_duration', 0)
+    section_timings = data.get('section_timings', [])
+    notes = data.get('notes', '')
+
+    result = RehearsalResult(
+        actual_duration=float(actual_duration),
+        target_duration=session.total_duration_estimate,
+        section_timings=section_timings,
+        notes=notes,
+    )
+
+    session.rehearsals.append(result)
+
+    return jsonify({
+        'success': True,
+        'rehearsal': result.to_dict(),
+        'total_rehearsals': len(session.rehearsals),
+    })
 
 
 # ============================================================================
