@@ -10,6 +10,7 @@ import re
 import subprocess
 import tempfile
 from dataclasses import dataclass, field, asdict
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -96,6 +97,47 @@ class DatasetAudit:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+class DatasetStatus(Enum):
+    """Status of a generated dataset."""
+    PENDING = "pending"
+    GENERATING = "generating"
+    VALIDATING = "validating"
+    MISMATCH = "mismatch"
+    ALIGNED = "aligned"
+    FINALIZED = "finalized"
+
+
+class ResultMatchStatus(Enum):
+    """Result of comparing expected vs actual values."""
+    MATCH = "match"
+    CLOSE = "close"
+    MISMATCH = "mismatch"
+
+
+@dataclass
+class DatasetSpec:
+    """Specification for a dataset to generate."""
+    name: str
+    description: str = ""
+    columns: List[Dict[str, Any]] = field(default_factory=list)
+    row_count: int = 100
+    target_column: Optional[str] = None
+    feature_columns: List[str] = field(default_factory=list)
+    constraints: List[str] = field(default_factory=list)
+
+
+@dataclass
+class GeneratedDataset:
+    """A generated dataset with validation results."""
+    spec: DatasetSpec
+    data: Any  # pd.DataFrame
+    file_path: Optional[Path] = None
+    status: DatasetStatus = DatasetStatus.PENDING
+    validation_results: List[Dict[str, Any]] = field(default_factory=list)
+    generation_attempts: int = 0
+    last_error: Optional[str] = None
 
 
 def _serialize(v: Any) -> Any:
@@ -270,6 +312,18 @@ class ScriptResultExtractor:
                 ))
 
         return results
+
+    def extract_from_script(self, script: str) -> Tuple[List[CodeBlock], List[ExpectedResult]]:
+        """Extract code blocks and all expected results from a script.
+
+        Convenience wrapper around extract_code_blocks() that also returns
+        a flat list of all expected results across blocks.
+        """
+        blocks = self.extract_code_blocks(script)
+        all_results = []
+        for block in blocks:
+            all_results.extend(block.expected_results)
+        return blocks, all_results
 
 
 # ============================================================================
@@ -533,6 +587,33 @@ print('__VALIDATION_RESULTS__:' + json.dumps(__results))
             return abs(a - e) / abs(e) <= tolerance
         except (TypeError, ValueError):
             return str(actual).lower() == str(expected).lower()
+
+    @staticmethod
+    def _compare(actual: Any, expected: Any, tolerance: float = 0.01) -> Tuple[float, 'ResultMatchStatus']:
+        """Compare actual vs expected and return difference + match status.
+
+        Returns:
+            (difference, status) where difference is relative error
+            and status is a ResultMatchStatus enum value.
+        """
+        try:
+            a = float(actual)
+            e = float(expected)
+            if e == 0:
+                diff = abs(a)
+            else:
+                diff = abs(a - e) / abs(e)
+
+            if diff <= tolerance:
+                return diff, ResultMatchStatus.MATCH
+            elif diff <= tolerance * 5:
+                return diff, ResultMatchStatus.CLOSE
+            else:
+                return diff, ResultMatchStatus.MISMATCH
+        except (TypeError, ValueError):
+            match = str(actual).lower() == str(expected).lower()
+            return (0.0 if match else 1.0,
+                    ResultMatchStatus.MATCH if match else ResultMatchStatus.MISMATCH)
 
 
 # ============================================================================

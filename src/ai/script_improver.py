@@ -9,6 +9,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass, field, asdict
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -24,9 +25,12 @@ class ScriptIssue:
     suggested_fix: str
     auto_fixable: bool
     points_lost: int
+    local_changes: List['LocalChange'] = field(default_factory=list)
+    global_changes: List['GlobalChange'] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        return d
 
 
 @dataclass
@@ -44,6 +48,54 @@ class ScriptScore:
             'issues': [i.to_dict() for i in self.issues],
             'passed': self.passed,
         }
+
+
+class IssueCategory(Enum):
+    """Category of a script issue."""
+    STRUCTURE = "structure"
+    CONTENT = "content"
+    QUALITY = "quality"
+    TONE = "tone"
+    TECHNICAL = "technical"
+    TIMING = "timing"
+    POLISH = "polish"
+    ACCESSIBILITY = "accessibility"
+
+
+class IssueSeverity(Enum):
+    """Severity of a script issue."""
+    CRITICAL = "critical"
+    WARNING = "warning"
+    SUGGESTION = "suggestion"
+
+
+@dataclass
+class LocalChange:
+    """A change to apply at a specific location."""
+    start_line: int
+    end_line: int
+    original_text: str
+    replacement_text: str
+    reason: str
+
+
+@dataclass
+class GlobalChange:
+    """A change to apply across the entire document."""
+    find_pattern: str
+    replace_with: str
+    occurrences: List[Dict[str, Any]] = field(default_factory=list)
+    reason: str = ""
+    is_regex: bool = False
+
+
+@dataclass
+class ScriptAnalysis:
+    """Result of analyzing a script (wraps ScriptScore with extra fields)."""
+    score: int  # 0-100
+    issues: List[ScriptIssue] = field(default_factory=list)
+    strengths: List[str] = field(default_factory=list)
+    summary: str = ""
 
 
 # ============================================================================
@@ -323,6 +375,125 @@ class ScriptImprover:
         })
 
         return current_script, history
+
+    # ------------------------------------------------------------------
+    # Alias methods matching prompt API
+    # ------------------------------------------------------------------
+
+    def analyze(self, script: str) -> 'ScriptAnalysis':
+        """Analyze script and return ScriptAnalysis with score, issues, strengths, summary.
+
+        This wraps score_script() and adds strengths/summary fields.
+        """
+        score = self.score_script(script)
+
+        # Determine strengths from what passed
+        strengths = []
+        for category, checks in RUBRIC.items():
+            for check_id, (label, _) in checks.items():
+                if score.breakdown.get(category, 0) > 0:
+                    # Check wasn't flagged as an issue
+                    if not any(i.title == f'Missing {check_id.replace("has_", "").upper()} section'
+                               for i in score.issues):
+                        strengths.append(label)
+
+        # Build summary
+        n_issues = len(score.issues)
+        summary = f"Score: {score.total}/100. Found {n_issues} issue{'s' if n_issues != 1 else ''}."
+
+        return ScriptAnalysis(
+            score=score.total,
+            issues=score.issues,
+            strengths=strengths,
+            summary=summary,
+        )
+
+    def apply_fix(self, script: str, issue: 'ScriptIssue',
+                  fix_type: str = 'all') -> str:
+        """Apply local and/or global changes from an issue.
+
+        Args:
+            script: The script text.
+            issue: The issue containing local_changes and/or global_changes.
+            fix_type: 'local', 'global', 'both', or 'all'.
+
+        Returns:
+            Updated script text.
+        """
+        result = script
+
+        if fix_type in ('local', 'both', 'all'):
+            for change in issue.local_changes:
+                result = self._apply_local_change(result, change)
+
+        if fix_type in ('global', 'both', 'all'):
+            for change in issue.global_changes:
+                result = self._apply_global_change(result, change)
+
+        return result
+
+    def improve_until_perfect(
+        self,
+        script: str,
+        target_score: int = 95,
+        max_iterations: int = 5,
+    ) -> Tuple[str, List['ScriptAnalysis']]:
+        """Iteratively improve script until target score reached.
+
+        Returns (final_script, history) where history is a list of
+        ScriptAnalysis objects.
+        """
+        history: List[ScriptAnalysis] = []
+        current_script = script
+
+        for _ in range(max_iterations):
+            analysis = self.analyze(current_script)
+            history.append(analysis)
+
+            if analysis.score >= target_score:
+                break
+
+            # Apply local/global changes from auto-fixable issues
+            auto_fixable = [i for i in analysis.issues if i.auto_fixable]
+            if not auto_fixable:
+                break
+
+            applied_any = False
+            for issue in auto_fixable:
+                if issue.local_changes or issue.global_changes:
+                    current_script = self.apply_fix(current_script, issue)
+                    applied_any = True
+
+            # If no structured changes available, try AI fix
+            if not applied_any and self.ai_client:
+                for issue in auto_fixable[:3]:
+                    try:
+                        current_script, _ = self.fix_issue(current_script, issue)
+                    except (ValueError, Exception):
+                        pass
+                    break
+            elif not applied_any:
+                break
+
+        return current_script, history
+
+    @staticmethod
+    def _apply_local_change(script: str, change: 'LocalChange') -> str:
+        """Apply a local change at specific lines."""
+        lines = script.split('\n')
+        start = max(0, change.start_line - 1)
+        end = min(len(lines), change.end_line)
+        before = lines[:start]
+        after = lines[end:]
+        result = before + [change.replacement_text] + after
+        return '\n'.join(result)
+
+    @staticmethod
+    def _apply_global_change(script: str, change: 'GlobalChange') -> str:
+        """Apply a global find/replace."""
+        if change.is_regex:
+            return re.sub(change.find_pattern, change.replace_with, script)
+        return script.replace(change.find_pattern, change.replace_with)
 
     # ------------------------------------------------------------------
     # Rule-based checks

@@ -15,6 +15,8 @@ class ImportedScript:
     code_blocks: List[Dict[str, Any]]
     ivq: Optional[Dict[str, Any]]
     raw_text: str
+    visual_cues: List[str] = field(default_factory=list)
+    expected_results: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class ScriptImporter:
@@ -70,11 +72,26 @@ class ScriptImporter:
         content = filepath.read_text(encoding="utf-8")
         return self._parse_markdown(content)
 
+    # Patterns for expected outputs in narration
+    EXPECTED_RESULT_PATTERNS = [
+        # "accuracy of 0.923" / "accuracy is 0.923"
+        (r'(\w+)\s+(?:of|is|equals?|was)\s+([\d.]+)', 'float'),
+        # "Accuracy: 0.923"
+        (r'(\w+):\s*([\d.]+)', 'float'),
+    ]
+
+    # Variable names to skip
+    _SKIP_VARS = {
+        'line', 'step', 'cell', 'version', 'python', 'slide', 'section',
+        'import', 'from', 'print', 'range', 'len', 'fig', 'size',
+    }
+
     def _parse_markdown(self, content: str) -> ImportedScript:
         """Extract sections, code blocks, visual cues, and IVQ."""
         sections = []
         code_blocks = []
         ivq = None
+        all_visual_cues: List[str] = []
 
         # Extract all code blocks first
         for match in self.CODE_BLOCK_PATTERN.finditer(content):
@@ -109,6 +126,7 @@ class ScriptImporter:
                     continue
 
                 visual_cues = self.VISUAL_CUE_PATTERN.findall(text)
+                all_visual_cues.extend(visual_cues)
 
                 # Tag code blocks with their section
                 section_code_matches = self.CODE_BLOCK_PATTERN.findall(text)
@@ -123,6 +141,9 @@ class ScriptImporter:
                     "visual_cues": visual_cues,
                 })
 
+        # Extract expected results from narration
+        expected_results = self._extract_expected_results(content)
+
         return ImportedScript(
             title=self._extract_title(content),
             duration_estimate=self._estimate_duration(content),
@@ -130,6 +151,8 @@ class ScriptImporter:
             code_blocks=code_blocks,
             ivq=ivq,
             raw_text=content,
+            visual_cues=all_visual_cues,
+            expected_results=expected_results,
         )
 
     def _parse_ivq(self, text: str) -> Optional[Dict[str, Any]]:
@@ -174,6 +197,45 @@ class ScriptImporter:
             return None
 
         return result
+
+    def _extract_expected_results(self, content: str) -> List[Dict[str, Any]]:
+        """Extract expected output values from narration text.
+
+        Looks for patterns like 'accuracy of 0.923' or 'Accuracy: 0.92'
+        near code blocks.
+        """
+        results: List[Dict[str, Any]] = []
+        seen_vars: set = set()
+
+        # Strip code blocks to search only narration
+        narration = self.CODE_BLOCK_PATTERN.sub('', content)
+
+        for pattern, vtype in self.EXPECTED_RESULT_PATTERNS:
+            for match in re.finditer(pattern, narration, re.IGNORECASE):
+                var_name = match.group(1).lower().strip()
+                value_str = match.group(2)
+
+                if var_name in self._SKIP_VARS or var_name in seen_vars:
+                    continue
+
+                try:
+                    value = float(value_str)
+                except ValueError:
+                    continue
+
+                # Filter out obviously non-metric values
+                if value > 10000:
+                    continue
+
+                seen_vars.add(var_name)
+                results.append({
+                    'variable_name': var_name,
+                    'expected_value': value,
+                    'value_type': vtype,
+                    'context': match.group(0),
+                })
+
+        return results
 
     def _extract_title(self, content: str) -> str:
         """Extract title from first heading."""
