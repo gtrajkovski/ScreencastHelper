@@ -21,6 +21,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +49,10 @@ from src.generators.production_notes_generator import ProductionNotesGenerator
 from src.generators.tts_optimizer import TTSOptimizer
 from src.generators.package_exporter import PackageExporter
 from src.generators.python_demo_generator import PythonDemoGenerator
+from src.ai.script_improver import ScriptImprover
+from src.generators.dataset_generator import (
+    ScriptResultExtractor, DatasetGenerator, DatasetValidator, DatasetAuditor,
+)
 
 app = Flask(__name__,
             template_folder='templates_v5',
@@ -55,6 +61,16 @@ app = Flask(__name__,
 
 project_store = ProjectStore(Path('projects'))
 ai_client = AIClient()
+
+# Demo recording state (singleton — one recording at a time)
+demo_recorder = {
+    "active": False,
+    "project_id": None,
+    "ffmpeg_process": None,
+    "demo_process": None,
+    "output_path": None,
+    "start_time": None,
+}
 
 
 # ============================================================================
@@ -707,6 +723,111 @@ def quality_check(project_id):
 
 
 # ============================================================================
+# SCRIPT SCORING & IMPROVEMENT API
+# ============================================================================
+
+@app.route('/api/projects/<project_id>/score-script', methods=['POST'])
+def score_script(project_id):
+    """Score the project script using the 0-100 rubric."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        improver = ScriptImprover(ai_client)
+        score = improver.score_script(project.raw_script)
+        return jsonify({'success': True, **score.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/fix-issue', methods=['POST'])
+def fix_issue(project_id):
+    """Fix a single script issue by re-scoring and matching issue ID."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.json or {}
+    issue_id = data.get('issue_id')
+    if not issue_id:
+        return jsonify({'error': 'issue_id is required'}), 400
+
+    try:
+        improver = ScriptImprover(ai_client)
+
+        # Re-score to find the issue
+        score = improver.score_script(project.raw_script)
+        issue = next((i for i in score.issues if i.id == issue_id), None)
+
+        if not issue:
+            return jsonify({'error': 'Issue not found'}), 404
+
+        # Apply fix
+        updated_script, explanation = improver.fix_issue(project.raw_script, issue)
+
+        # Save
+        project.raw_script = updated_script
+        project.segments = parse_script_to_segments(updated_script)
+        project_store.save(project)
+
+        # Re-score
+        new_score = improver.score_script(updated_script)
+
+        return jsonify({
+            'success': True,
+            'explanation': explanation,
+            'old_score': score.total,
+            'new_score': new_score.total,
+            'remaining_issues': len(new_score.issues),
+            'updated_script': updated_script,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/fix-all-issues', methods=['POST'])
+def fix_all_issues(project_id):
+    """Iteratively fix all script issues until target score is reached."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.json or {}
+    target_score = int(data.get('target_score', 95))
+    max_iterations = int(data.get('max_iterations', 5))
+
+    try:
+        improver = ScriptImprover(ai_client)
+
+        initial_score = improver.score_script(project.raw_script)
+
+        updated_script, history = improver.fix_all_issues(
+            project.raw_script,
+            max_iterations=max_iterations,
+            target_score=target_score,
+        )
+
+        # Save
+        project.raw_script = updated_script
+        project.segments = parse_script_to_segments(updated_script)
+        project_store.save(project)
+
+        final_score = improver.score_script(updated_script)
+
+        return jsonify({
+            'success': True,
+            'initial_score': initial_score.total,
+            'final_score': final_score.total,
+            'iterations': len([h for h in history if h.get('iteration') != 'final']),
+            'history': history,
+            'remaining_issues': len(final_score.issues),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
 # EXPORT API
 # ============================================================================
 
@@ -1337,6 +1458,373 @@ def serve_data(project_id, filename):
     if not filepath.exists():
         return jsonify({'error': 'File not found'}), 404
     return send_file(str(filepath), mimetype='text/csv')
+
+
+# ============================================================================
+# DATASET RESULT ALIGNMENT
+# ============================================================================
+
+@app.route('/api/projects/<project_id>/analyze-script-data', methods=['POST'])
+def analyze_script_data(project_id):
+    """Extract code blocks and expected results from script."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        extractor = ScriptResultExtractor()
+        blocks = extractor.extract_code_blocks(project.raw_script or '')
+        return jsonify({
+            'success': True,
+            'code_blocks': [b.to_dict() for b in blocks],
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/generate-aligned-dataset', methods=['POST'])
+def generate_aligned_dataset(project_id):
+    """AI-generate a dataset for a specific code block that produces expected results."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.json or {}
+    block_id = data.get('code_block_id')
+    num_rows = data.get('num_rows', 100)
+
+    if not block_id:
+        return jsonify({'error': 'code_block_id is required'}), 400
+
+    try:
+        extractor = ScriptResultExtractor()
+        blocks = extractor.extract_code_blocks(project.raw_script or '')
+        block = next((b for b in blocks if b.id == block_id), None)
+        if not block:
+            return jsonify({'error': f'Code block {block_id} not found'}), 404
+
+        generator = DatasetGenerator(ai_client)
+        df = generator.generate_for_code_block(block, num_rows=num_rows)
+
+        # Save to project data dir
+        data_dir = project_store._project_dir(project_id) / 'data'
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = block.input_datasets[0] if block.input_datasets else f'{block_id}.csv'
+        filepath = data_dir / filename
+        df.to_csv(filepath, index=False)
+
+        # Update project datasets
+        if not project.datasets:
+            project.datasets = []
+        project.datasets.append({
+            'name': block_id,
+            'filename': filename,
+            'rows': len(df),
+            'columns': list(df.columns),
+            'aligned': True,
+            'code_block_id': block_id,
+        })
+        project_store.save(project)
+
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'rows': len(df),
+            'columns': list(df.columns),
+            'preview': df.head(5).to_string(),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/datasets/<dataset_name>/validate', methods=['POST'])
+def validate_dataset(project_id, dataset_name):
+    """Run code against a dataset and check expected results."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        import pandas as pd
+
+        safe_name = safe_filename(dataset_name)
+    except ValueError:
+        return jsonify({'error': 'Invalid dataset name'}), 400
+
+    try:
+        data_dir = project_store._project_dir(project_id) / 'data'
+        filepath = data_dir / safe_name
+        if not filepath.exists():
+            return jsonify({'error': 'Dataset file not found'}), 404
+
+        df = pd.read_csv(filepath)
+
+        # Find matching code block
+        req = request.json or {}
+        block_id = req.get('code_block_id')
+
+        extractor = ScriptResultExtractor()
+        blocks = extractor.extract_code_blocks(project.raw_script or '')
+        block = next((b for b in blocks if b.id == block_id), None) if block_id else None
+
+        if not block:
+            return jsonify({'error': 'code_block_id is required or not found'}), 400
+
+        validator = DatasetValidator()
+        result = validator.validate(block, {'df': df})
+
+        return jsonify({'success': True, 'validation': result.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/datasets/<dataset_name>/audit', methods=['GET'])
+def audit_dataset(project_id, dataset_name):
+    """Quality checks on a dataset."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        import pandas as pd
+
+        safe_name = safe_filename(dataset_name)
+    except ValueError:
+        return jsonify({'error': 'Invalid dataset name'}), 400
+
+    try:
+        data_dir = project_store._project_dir(project_id) / 'data'
+        filepath = data_dir / safe_name
+        if not filepath.exists():
+            return jsonify({'error': 'Dataset file not found'}), 404
+
+        df = pd.read_csv(filepath)
+        auditor = DatasetAuditor()
+        audit = auditor.audit(df, dataset_name)
+
+        return jsonify({'success': True, 'audit': audit.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/datasets/<dataset_name>/finalize', methods=['POST'])
+def finalize_dataset(project_id, dataset_name):
+    """Mark a dataset as production-ready."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        safe_name = safe_filename(dataset_name)
+    except ValueError:
+        return jsonify({'error': 'Invalid dataset name'}), 400
+
+    try:
+        data_dir = project_store._project_dir(project_id) / 'data'
+        filepath = data_dir / safe_name
+        if not filepath.exists():
+            return jsonify({'error': 'Dataset file not found'}), 404
+
+        # Update dataset status in project
+        if project.datasets:
+            for ds in project.datasets:
+                if ds.get('filename') == safe_name:
+                    ds['finalized'] = True
+                    break
+        project_store.save(project)
+
+        return jsonify({'success': True, 'finalized': safe_name})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/datasets/<dataset_name>/download', methods=['GET'])
+def download_dataset(project_id, dataset_name):
+    """Download a dataset as CSV."""
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        safe_name = safe_filename(dataset_name)
+    except ValueError:
+        return jsonify({'error': 'Invalid dataset name'}), 400
+
+    filepath = project_store._project_dir(project_id) / 'data' / safe_name
+    if not filepath.exists():
+        return jsonify({'error': 'File not found'}), 404
+
+    return send_file(
+        str(filepath),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=safe_name,
+    )
+
+
+# ============================================================================
+# DEMO RECORDING
+# ============================================================================
+
+@app.route('/api/projects/<project_id>/record-demo', methods=['POST'])
+def start_record_demo(project_id):
+    """Start FFmpeg screen capture and launch demo script in a terminal."""
+    if demo_recorder['active']:
+        return jsonify({'error': 'A demo recording is already in progress'}), 400
+
+    project = project_store.load(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    from src.services.recording_service import start_screen_capture
+
+    # Check demo script exists
+    demo_dir = project_store._project_dir(project_id) / 'demo_script'
+    demo_script = demo_dir / 'screencast_demo.py'
+    if not demo_script.exists():
+        return jsonify({
+            'error': 'Demo script not found. Generate it first via /generate-demo-script.'
+        }), 400
+
+    data = request.json or {}
+    width = int(data.get('width', 1920))
+    height = int(data.get('height', 1080))
+    offset_x = int(data.get('offset_x', 0))
+    offset_y = int(data.get('offset_y', 0))
+    fps = int(data.get('fps', 30))
+
+    # Prepare output path
+    rec_dir = project_store._project_dir(project_id) / 'recordings'
+    rec_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_path = rec_dir / f'demo_{timestamp}.mp4'
+
+    # Start FFmpeg screen capture
+    ffmpeg_proc, err = start_screen_capture(
+        str(output_path), width=width, height=height,
+        offset_x=offset_x, offset_y=offset_y, fps=fps,
+    )
+    if not ffmpeg_proc:
+        return jsonify({'error': f'Failed to start screen capture: {err}'}), 500
+
+    # Launch demo script in a visible terminal window
+    try:
+        if os.name == 'nt':
+            demo_proc = subprocess.Popen(
+                ['cmd', '/c', 'start', 'Demo Recording', 'py', '-3', 'screencast_demo.py'],
+                cwd=str(demo_dir),
+            )
+        else:
+            # Linux/macOS fallback
+            terminal = shutil.which('gnome-terminal') or shutil.which('xterm')
+            if terminal and 'gnome-terminal' in terminal:
+                demo_proc = subprocess.Popen(
+                    [terminal, '--', 'python3', 'screencast_demo.py'],
+                    cwd=str(demo_dir),
+                )
+            elif terminal:
+                demo_proc = subprocess.Popen(
+                    [terminal, '-e', 'python3 screencast_demo.py'],
+                    cwd=str(demo_dir),
+                )
+            else:
+                demo_proc = subprocess.Popen(
+                    ['python3', 'screencast_demo.py'],
+                    cwd=str(demo_dir),
+                )
+    except Exception as e:
+        # Stop FFmpeg if demo launch fails
+        from src.services.recording_service import stop_screen_capture
+        stop_screen_capture(ffmpeg_proc)
+        return jsonify({'error': f'Failed to launch demo terminal: {e}'}), 500
+
+    demo_recorder['active'] = True
+    demo_recorder['project_id'] = project_id
+    demo_recorder['ffmpeg_process'] = ffmpeg_proc
+    demo_recorder['demo_process'] = demo_proc
+    demo_recorder['output_path'] = str(output_path)
+    demo_recorder['start_time'] = time.time()
+
+    return jsonify({
+        'success': True,
+        'output_path': str(output_path),
+        'message': 'Recording started. Press ENTER in the demo terminal to advance slides.',
+    })
+
+
+@app.route('/api/projects/<project_id>/record-demo/stop', methods=['POST'])
+def stop_record_demo(project_id):
+    """Stop demo recording — gracefully stop FFmpeg and terminate demo."""
+    if not demo_recorder['active']:
+        return jsonify({'error': 'No demo recording in progress'}), 400
+
+    if demo_recorder['project_id'] != project_id:
+        return jsonify({'error': 'Recording belongs to a different project'}), 400
+
+    from src.services.recording_service import stop_screen_capture
+
+    # Stop FFmpeg
+    stop_screen_capture(demo_recorder['ffmpeg_process'])
+
+    # Terminate demo process if still running
+    demo_proc = demo_recorder['demo_process']
+    if demo_proc and demo_proc.poll() is None:
+        try:
+            demo_proc.terminate()
+        except Exception:
+            pass
+
+    duration = round(time.time() - demo_recorder['start_time'], 1)
+    output_path = demo_recorder['output_path']
+
+    # Reset state
+    demo_recorder['active'] = False
+    demo_recorder['project_id'] = None
+    demo_recorder['ffmpeg_process'] = None
+    demo_recorder['demo_process'] = None
+    demo_recorder['output_path'] = None
+    demo_recorder['start_time'] = None
+
+    if Path(output_path).exists():
+        size_mb = round(Path(output_path).stat().st_size / (1024 * 1024), 2)
+        return jsonify({
+            'success': True,
+            'filename': Path(output_path).name,
+            'path': output_path,
+            'duration_seconds': duration,
+            'size_mb': size_mb,
+        })
+
+    return jsonify({'error': 'Recording file was not created'}), 500
+
+
+@app.route('/api/projects/<project_id>/record-demo/status', methods=['GET'])
+def record_demo_status(project_id):
+    """Poll demo recording status."""
+    if not demo_recorder['active'] or demo_recorder['project_id'] != project_id:
+        return jsonify({
+            'active': False,
+            'project_id': None,
+            'elapsed_seconds': 0,
+            'output_path': None,
+        })
+
+    elapsed = round(time.time() - demo_recorder['start_time'], 1)
+
+    # Check if FFmpeg is still running
+    ffmpeg_alive = (
+        demo_recorder['ffmpeg_process'] is not None
+        and demo_recorder['ffmpeg_process'].poll() is None
+    )
+
+    return jsonify({
+        'active': demo_recorder['active'],
+        'project_id': demo_recorder['project_id'],
+        'elapsed_seconds': elapsed,
+        'output_path': demo_recorder['output_path'],
+        'ffmpeg_alive': ffmpeg_alive,
+    })
 
 
 # ============================================================================

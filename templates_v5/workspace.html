@@ -137,6 +137,18 @@
     .qc-overall-val { font-size: 22px; }
     .qc-overall-val.good { color: var(--accent-success); }
     .qc-overall-val.ok { color: var(--accent-warning); }
+
+    /* ===== Script Score Issues ===== */
+    .si-issue { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: var(--bg-card); border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--border-color); }
+    .si-issue.critical { border-left-color: var(--accent-danger); }
+    .si-issue.warning { border-left-color: var(--accent-warning); }
+    .si-issue.suggestion { border-left-color: var(--accent); }
+    .si-issue-header { display: flex; justify-content: space-between; align-items: center; }
+    .si-issue-title { font-size: 13px; font-weight: 500; color: var(--text-primary); flex: 1; }
+    .si-issue-pts { font-size: 11px; color: var(--accent-danger); white-space: nowrap; }
+    .si-issue-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+    .si-issue-actions { display: flex; gap: 6px; margin-top: 4px; }
+    .si-issue-actions button { font-size: 11px; padding: 3px 10px; }
     .qc-overall-val.bad { color: var(--accent-danger); }
 
     /* ===== Export ===== */
@@ -153,6 +165,12 @@
     .folder-item:hover { background: var(--bg-card); }
     .folder-path-current { font-size: 12px; color: var(--text-muted); word-break: break-all; margin-bottom: 8px; font-family: 'JetBrains Mono', monospace; }
 
+    /* ===== Demo Recording ===== */
+    .rec-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f44336; margin-right: 6px; animation: rec-pulse 1s infinite; }
+    @keyframes rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .rec-elapsed { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--text-primary); }
+    .rec-result { font-size: 12px; margin-top: 8px; padding: 8px; background: var(--bg-card); border-radius: 6px; }
+
     /* ===== Environment Recommendation ===== */
     .env-result { background: var(--bg-card); border-radius: 6px; padding: 12px; margin-top: 10px; display: none; }
     .env-result.visible { display: block; }
@@ -167,6 +185,20 @@
     .dataset-item .ds-name { font-weight: 600; font-size: 13px; }
     .dataset-item .ds-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
     .dataset-preview { font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: pre; overflow-x: auto; margin-top: 6px; max-height: 120px; overflow-y: auto; color: var(--text-secondary); }
+
+    /* ===== Dataset Alignment ===== */
+    .da-block { background: var(--bg-card); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; border-left: 3px solid var(--accent); }
+    .da-block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .da-block-id { font-size: 12px; font-weight: 600; color: var(--accent); }
+    .da-block-section { font-size: 11px; color: var(--text-muted); }
+    .da-block code { font-family: 'JetBrains Mono', monospace; font-size: 11px; display: block; background: var(--bg-darker, #1a1a2e); padding: 6px 8px; border-radius: 4px; white-space: pre-wrap; max-height: 80px; overflow-y: auto; margin-bottom: 6px; }
+    .da-expected { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; }
+    .da-expected span { color: var(--accent-success, #4caf50); font-weight: 500; }
+    .da-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .da-actions button { font-size: 11px; padding: 3px 10px; }
+    .da-validation { margin-top: 6px; font-size: 11px; padding: 6px 8px; border-radius: 4px; }
+    .da-validation.pass { background: rgba(76, 175, 80, 0.15); color: #4caf50; }
+    .da-validation.fail { background: rgba(244, 67, 54, 0.15); color: #f44336; }
 </style>
 {% endblock %}
 
@@ -318,6 +350,34 @@
             </div>
         </div>
 
+        <!-- Script Score & Improvement -->
+        <div class="panel-section" id="script-score-section">
+            <div class="panel-header" onclick="toggleSection('script-score-section')">
+                <h3>Script Score &amp; Improvement</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <div id="si-score-circle" style="position: relative; width: 64px; height: 64px; flex-shrink: 0;">
+                        <svg viewBox="0 0 100 100" width="64" height="64" style="transform: rotate(-90deg);">
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--bg-card)" stroke-width="8"/>
+                            <circle id="si-score-arc" cx="50" cy="50" r="42" fill="none" stroke="var(--accent)" stroke-width="8" stroke-dasharray="263.9" stroke-dashoffset="263.9" stroke-linecap="round" style="transition: stroke-dashoffset 0.6s ease, stroke 0.3s;"/>
+                        </svg>
+                        <span id="si-score-num" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; font-weight: 700; color: var(--text-primary);">--</span>
+                    </div>
+                    <div style="flex: 1;">
+                        <div id="si-summary" style="font-size: 12px; color: var(--text-secondary);">Click Score to analyze</div>
+                        <div id="si-breakdown" style="font-size: 11px; color: var(--text-muted); margin-top: 4px;"></div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+                    <button class="btn btn-sm btn-primary" style="flex: 1;" onclick="scoreScript()">Score Script</button>
+                    <button class="btn btn-sm" style="flex: 1;" id="btn-fix-all" onclick="fixAllScriptIssues()" disabled>Improve All</button>
+                </div>
+                <div id="si-issues-list" style="max-height: 350px; overflow-y: auto;"></div>
+            </div>
+        </div>
+
         <!-- Environment Recommendation -->
         <div class="panel-section" id="env-section">
             <div class="panel-header" onclick="toggleSection('env-section')">
@@ -348,6 +408,18 @@
                 <button class="btn btn-sm" style="width: 100%; margin-bottom: 6px;" id="btn-analyze-data" onclick="analyzeData()">Analyze Data Needs</button>
                 <button class="btn btn-sm btn-success" style="width: 100%;" id="btn-gen-data" onclick="generateDatasets()" disabled>Generate Datasets</button>
                 <div class="dataset-list" id="dataset-list"></div>
+            </div>
+        </div>
+
+        <!-- Dataset Alignment -->
+        <div class="panel-section" id="data-align-section">
+            <div class="panel-header" onclick="toggleSection('data-align-section')">
+                <h3>Dataset Alignment</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <button class="btn btn-sm" style="width: 100%; margin-bottom: 8px;" onclick="analyzeScriptData()">Analyze Script Code</button>
+                <div id="da-blocks-list" style="max-height: 400px; overflow-y: auto;"></div>
             </div>
         </div>
 
@@ -391,6 +463,31 @@
                     <button class="btn btn-success" onclick="exportAsZip()">Download ZIP</button>
                 </div>
                 <div id="export-status" style="margin-top: 8px; font-size: 12px; color: var(--text-muted);"></div>
+            </div>
+        </div>
+
+        <!-- Demo Recording -->
+        <div class="panel-section" id="rec-demo-section">
+            <div class="panel-header" onclick="toggleSection('rec-demo-section')">
+                <h3>Demo Recording</h3>
+                <span class="collapse-icon">&#9660;</span>
+            </div>
+            <div class="panel-body">
+                <div id="rec-idle">
+                    <button class="btn btn-sm" style="width: 100%; background: #c62828; color: white;" onclick="startDemoRecording()">Start Demo Recording</button>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                        Launches the demo script in a terminal and captures the screen with FFmpeg.
+                        Generate a demo script first via the Production section.
+                    </div>
+                </div>
+                <div id="rec-active" style="display: none;">
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <span class="rec-indicator"></span>
+                        <span class="rec-elapsed" id="rec-elapsed">00:00</span>
+                    </div>
+                    <button class="btn btn-sm" style="width: 100%; background: #c62828; color: white;" onclick="stopDemoRecording()">Stop Recording</button>
+                </div>
+                <div id="rec-result"></div>
             </div>
         </div>
 
@@ -976,6 +1073,274 @@ async function generateDatasets() {
         showToast(`${data.datasets.length} dataset(s) generated`);
     } catch (err) { showToast(err.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = 'Generate Datasets'; }
+}
+
+// ========================================================================
+// Dataset Alignment
+// ========================================================================
+let daBlocks = [];
+
+async function analyzeScriptData() {
+    const list = document.getElementById('da-blocks-list');
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Analyzing...</div>';
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/analyze-script-data`, { method: 'POST' });
+        daBlocks = data.code_blocks || [];
+        if (daBlocks.length === 0) {
+            list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">No code blocks found in script.</div>';
+            return;
+        }
+        renderDABlocks();
+        showToast(`${daBlocks.length} code block(s) found`);
+    } catch (err) { showToast(err.message, 'error'); list.innerHTML = ''; }
+}
+
+function renderDABlocks() {
+    const list = document.getElementById('da-blocks-list');
+    list.innerHTML = daBlocks.map((b, i) => {
+        const expected = (b.expected_results || []).map(r =>
+            `<span>${r.variable_name}</span> = ${r.expected_value}`
+        ).join(', ') || 'None detected';
+        const files = (b.input_datasets || []).join(', ') || 'none';
+        return `<div class="da-block" id="da-block-${i}">
+            <div class="da-block-header">
+                <span class="da-block-id">${b.id}</span>
+                <span class="da-block-section">${b.section}</span>
+            </div>
+            <code>${escapeHtml(b.code.substring(0, 300))}</code>
+            <div class="da-expected">Expected: ${expected}</div>
+            <div class="da-expected">Files: ${files}</div>
+            <div class="da-actions">
+                <button class="btn btn-sm btn-primary" onclick="generateAlignedDataset('${b.id}', ${i})">Generate</button>
+                <button class="btn btn-sm" onclick="validateDataset('${b.id}', ${i})" disabled id="da-validate-${i}">Validate</button>
+                <button class="btn btn-sm" onclick="auditDataset(${i})" disabled id="da-audit-${i}">Audit</button>
+                <button class="btn btn-sm btn-success" onclick="finalizeDataset(${i})" disabled id="da-finalize-${i}">Finalize</button>
+            </div>
+            <div id="da-result-${i}"></div>
+        </div>`;
+    }).join('');
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function generateAlignedDataset(blockId, idx) {
+    const btn = document.querySelector(`#da-block-${idx} .btn-primary`);
+    btn.disabled = true; btn.textContent = 'Generating...';
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/generate-aligned-dataset`, {
+            method: 'POST', body: JSON.stringify({ code_block_id: blockId, num_rows: 100 })
+        });
+        daBlocks[idx]._filename = data.filename;
+        document.getElementById(`da-result-${idx}`).innerHTML =
+            `<div class="da-validation pass">${data.rows} rows, ${data.columns.length} cols &mdash; ${data.filename}</div>`;
+        document.getElementById(`da-validate-${idx}`).disabled = false;
+        document.getElementById(`da-audit-${idx}`).disabled = false;
+        document.getElementById(`da-finalize-${idx}`).disabled = false;
+        showToast(`Dataset generated: ${data.filename}`);
+    } catch (err) {
+        document.getElementById(`da-result-${idx}`).innerHTML =
+            `<div class="da-validation fail">${err.message}</div>`;
+        showToast(err.message, 'error');
+    } finally { btn.disabled = false; btn.textContent = 'Generate'; }
+}
+
+async function validateDataset(blockId, idx) {
+    const filename = daBlocks[idx]._filename;
+    if (!filename) { showToast('Generate a dataset first', 'error'); return; }
+    const btn = document.getElementById(`da-validate-${idx}`);
+    btn.disabled = true; btn.textContent = 'Validating...';
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/datasets/${encodeURIComponent(filename)}/validate`, {
+            method: 'POST', body: JSON.stringify({ code_block_id: blockId })
+        });
+        const v = data.validation;
+        const cls = v.passed ? 'pass' : 'fail';
+        let html = `<div class="da-validation ${cls}">`;
+        html += v.passed ? 'All results match!' : 'Mismatch detected:';
+        if (v.errors && v.errors.length > 0) {
+            html += '<br>' + v.errors.join('<br>');
+        }
+        html += '</div>';
+        document.getElementById(`da-result-${idx}`).innerHTML = html;
+        showToast(v.passed ? 'Validation passed' : 'Validation failed', v.passed ? 'success' : 'error');
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Validate'; }
+}
+
+async function auditDataset(idx) {
+    const filename = daBlocks[idx]._filename;
+    if (!filename) { showToast('Generate a dataset first', 'error'); return; }
+    const btn = document.getElementById(`da-audit-${idx}`);
+    btn.disabled = true; btn.textContent = 'Auditing...';
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/datasets/${encodeURIComponent(filename)}/audit`);
+        const a = data.audit;
+        const cls = a.quality_score >= 80 ? 'pass' : 'fail';
+        let html = `<div class="da-validation ${cls}">`;
+        html += `Quality: ${a.quality_score}/100 | ${a.row_count} rows, ${a.column_count} cols`;
+        if (a.issues && a.issues.length > 0) {
+            html += '<br>' + a.issues.map(i => `${i.type}: ${i.details}`).join('<br>');
+        } else {
+            html += '<br>No issues found';
+        }
+        html += '</div>';
+        document.getElementById(`da-result-${idx}`).innerHTML = html;
+        showToast(`Audit score: ${a.quality_score}/100`);
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Audit'; }
+}
+
+async function finalizeDataset(idx) {
+    const filename = daBlocks[idx]._filename;
+    if (!filename) { showToast('Generate a dataset first', 'error'); return; }
+    try {
+        await api(`/api/projects/${PROJECT_ID}/datasets/${encodeURIComponent(filename)}/finalize`, { method: 'POST' });
+        document.getElementById(`da-result-${idx}`).innerHTML =
+            `<div class="da-validation pass">Finalized &mdash; <a href="/api/projects/${PROJECT_ID}/datasets/${encodeURIComponent(filename)}/download" target="_blank">Download CSV</a></div>`;
+        showToast(`${filename} finalized`);
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+// ========================================================================
+// Demo Recording
+// ========================================================================
+let recTimer = null;
+
+async function startDemoRecording() {
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/record-demo`, {
+            method: 'POST', body: JSON.stringify({ width: 1920, height: 1080 })
+        });
+        document.getElementById('rec-idle').style.display = 'none';
+        document.getElementById('rec-active').style.display = 'block';
+        document.getElementById('rec-result').innerHTML = '';
+        recTimer = setInterval(pollRecordingStatus, 1000);
+        showToast(data.message || 'Recording started');
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function stopDemoRecording() {
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/record-demo/stop`, { method: 'POST' });
+        clearInterval(recTimer); recTimer = null;
+        document.getElementById('rec-idle').style.display = 'block';
+        document.getElementById('rec-active').style.display = 'none';
+        document.getElementById('rec-result').innerHTML = `
+            <div class="rec-result">
+                <strong>${data.filename}</strong><br>
+                ${data.duration_seconds}s &mdash; ${data.size_mb} MB<br>
+                <a href="/api/recordings/${PROJECT_ID}/${data.filename}" target="_blank">Download</a>
+            </div>`;
+        showToast(`Recording saved: ${data.filename}`);
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function pollRecordingStatus() {
+    try {
+        const data = await api(`/api/projects/${PROJECT_ID}/record-demo/status`);
+        if (!data.active) {
+            clearInterval(recTimer); recTimer = null;
+            document.getElementById('rec-idle').style.display = 'block';
+            document.getElementById('rec-active').style.display = 'none';
+            return;
+        }
+        const secs = Math.floor(data.elapsed_seconds);
+        const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+        const ss = String(secs % 60).padStart(2, '0');
+        document.getElementById('rec-elapsed').textContent = `${mm}:${ss}`;
+    } catch (err) { /* ignore poll errors */ }
+}
+
+// ========================================================================
+// Script Score & Improvement
+// ========================================================================
+let siIssues = [];
+
+async function scoreScript() {
+    const scoreNum = document.getElementById('si-score-num');
+    const summary = document.getElementById('si-summary');
+    scoreNum.textContent = '...';
+    summary.textContent = 'Scoring...';
+    try {
+        const data = await api('/api/projects/{{ project.id }}/score-script', { method: 'POST' });
+        siIssues = data.issues || [];
+        // Update circle
+        const total = data.total || 0;
+        scoreNum.textContent = total;
+        const arc = document.getElementById('si-score-arc');
+        const circumference = 2 * Math.PI * 42;
+        arc.setAttribute('stroke-dashoffset', circumference - (total / 100) * circumference);
+        arc.setAttribute('stroke', total >= 80 ? 'var(--accent-success)' : total >= 50 ? 'var(--accent-warning)' : 'var(--accent-danger)');
+        // Breakdown
+        const bd = data.breakdown || {};
+        document.getElementById('si-breakdown').textContent = Object.entries(bd).map(([k, v]) => `${k}: ${v}`).join(' | ');
+        // Summary
+        const errs = siIssues.filter(i => i.severity === 'critical').length;
+        const warns = siIssues.filter(i => i.severity === 'warning').length;
+        summary.textContent = errs ? `${errs} critical, ${warns} warnings` : warns ? `${warns} warnings` : 'Looking good!';
+        summary.style.color = errs ? 'var(--accent-danger)' : warns ? 'var(--accent-warning)' : 'var(--accent-success)';
+        // Issues list
+        const list = document.getElementById('si-issues-list');
+        if (siIssues.length === 0) {
+            list.innerHTML = '<p style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 8px;">No issues found</p>';
+        } else {
+            list.innerHTML = siIssues.map((iss, idx) => `
+                <div class="si-issue ${iss.severity}">
+                    <div class="si-issue-header">
+                        <span class="si-issue-title">${iss.title}</span>
+                        <span class="si-issue-pts">-${iss.points_lost}pts</span>
+                    </div>
+                    <div class="si-issue-desc">${iss.description}</div>
+                    <div class="si-issue-actions">
+                        ${iss.auto_fixable ? `<button class="btn btn-sm btn-primary" onclick="fixScriptIssue('${iss.id}', ${idx})">Fix</button>` : ''}
+                        <button class="btn btn-sm" onclick="this.closest('.si-issue').remove()">Skip</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        // Enable Fix All
+        document.getElementById('btn-fix-all').disabled = !siIssues.some(i => i.auto_fixable);
+    } catch (err) {
+        scoreNum.textContent = '!';
+        summary.textContent = err.message;
+        summary.style.color = 'var(--accent-danger)';
+    }
+}
+
+async function fixScriptIssue(issueId, idx) {
+    try {
+        showToast('Fixing issue...');
+        const data = await api('/api/projects/{{ project.id }}/fix-issue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ issue_id: issueId })
+        });
+        if (data.updated_script) {
+            document.getElementById('editor').value = data.updated_script;
+            renderPreview();
+        }
+        showToast(`Fixed! Score: ${data.old_score} → ${data.new_score}`, 'success');
+        scoreScript();
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function fixAllScriptIssues() {
+    const btn = document.getElementById('btn-fix-all');
+    btn.disabled = true;
+    btn.textContent = 'Improving...';
+    try {
+        const data = await api('/api/projects/{{ project.id }}/fix-all-issues', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target_score: 95, max_iterations: 5 })
+        });
+        showToast(`Score: ${data.initial_score} → ${data.final_score} in ${data.iterations} iterations`, 'success');
+        // Reload to reflect changes
+        location.reload();
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Improve All'; }
 }
 </script>
 {% endblock %}

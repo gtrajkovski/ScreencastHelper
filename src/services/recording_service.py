@@ -4,11 +4,13 @@ Provides optional FFmpeg-based operations:
 - Merge audio + video
 - Concatenate segments
 - Trim segments
+- Screen capture via gdigrab
 - Check FFmpeg availability
 
 Degrades gracefully when FFmpeg is not installed.
 """
 
+import os
 import subprocess
 import shutil
 from pathlib import Path
@@ -225,3 +227,85 @@ def trim_segment(
         return False, "FFmpeg timed out"
     except Exception as e:
         return False, str(e)
+
+
+def start_screen_capture(
+    output_path: str,
+    width: int = 1920,
+    height: int = 1080,
+    offset_x: int = 0,
+    offset_y: int = 0,
+    fps: int = 30,
+) -> Tuple[Optional[subprocess.Popen], str]:
+    """Start FFmpeg gdigrab screen capture as a background process.
+
+    The returned Popen has stdin=PIPE so the caller can send b'q' to
+    gracefully stop recording.
+
+    Args:
+        output_path: Path for the output .mp4 file
+        width: Capture width in pixels
+        height: Capture height in pixels
+        offset_x: Horizontal offset from top-left of desktop
+        offset_y: Vertical offset from top-left of desktop
+        fps: Frames per second
+
+    Returns:
+        (process, error_message) — process is a Popen on success, None on failure
+    """
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return None, "FFmpeg not found"
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        ffmpeg, '-y',
+        '-f', 'gdigrab',
+        '-framerate', str(fps),
+        '-offset_x', str(offset_x),
+        '-offset_y', str(offset_y),
+        '-video_size', f'{width}x{height}',
+        '-i', 'desktop',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-pix_fmt', 'yuv420p',
+        '-crf', '23',
+        str(output_path),
+    ]
+
+    try:
+        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        process = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=creation_flags,
+        )
+        return process, ""
+    except Exception as e:
+        return None, str(e)
+
+
+def stop_screen_capture(process: subprocess.Popen, timeout: int = 10) -> bool:
+    """Gracefully stop an FFmpeg screen capture process.
+
+    Sends 'q' to stdin, waits for clean shutdown.  Falls back to kill().
+
+    Returns True if the process exited cleanly.
+    """
+    if process is None or process.poll() is not None:
+        return True
+
+    try:
+        process.stdin.write(b'q')
+        process.stdin.flush()
+        process.wait(timeout=timeout)
+        return True
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            pass
+        return False

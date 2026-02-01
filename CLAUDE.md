@@ -52,8 +52,9 @@ Two separate AI client implementations exist for different contexts:
 - **`src/utils/ai_client.py`** (one-shot): Pre-built methods like `generate_script()`, `generate_demo_code()` with hardcoded prompts. Used by CLI generators.
 - **`src/ai/client.py`** (conversational): `chat()`, `chat_stream()`, `generate()` with conversation history. Used by web app for interactive features.
 - **`src/ai/actions.py`**: AI-driven actions (segment improvement, text selection editing) used by v5 API endpoints.
+- **`src/ai/script_improver.py`**: `ScriptImprover` class with hybrid rule-based + AI scoring (0-100 rubric) and iterative auto-fixing. Scores structure (WWHAA sections), timing (word counts), visual cues, IVQ completeness via rules; quality/polish checks via AI. `fix_all_issues()` iterates up to `max_iterations` fixing top 3 issues per round until `target_score` (default 95) is reached.
 
-The web app (`app_v3.py`) builds prompts inline using constants from `src/ai/prompts.py`.
+The legacy web app (`app_v3.py`) builds prompts inline using constants from `src/ai/prompts.py`.
 
 ### WWHAA Script Structure
 
@@ -105,15 +106,11 @@ Migration: `python scripts/migrate_v4_to_v5.py [--dry-run]`
 
 `TTSAudioGenerator` in `src/generators/tts_audio_generator.py` synthesizes MP3 audio via Edge TTS (`edge-tts` package). `TimelineGenerator` produces timed event sequences that sync narration audio with demo code execution.
 
-### Data Model (v5)
+### Data Model & Path Safety (v5)
 
-`Project` and `Segment` are Python dataclasses in `src/core/models.py` with `.to_dict()` / `.from_dict()` for JSON serialization. `ProjectStore` persists projects to `projects/{id}/project.json` with `audio/`, `video/`, `data/` subdirectories. Path traversal is blocked via `_sanitize_id()`.
+`Project` and `Segment` are Python dataclasses in `src/core/models.py` with `.to_dict()` / `.from_dict()` for JSON serialization. Segment types: `SLIDE`, `SCREENCAST`, `IVQ`. Statuses: `DRAFT`, `RECORDED`, `APPROVED`.
 
-Segment types: `SLIDE`, `SCREENCAST`, `IVQ`. Statuses: `DRAFT`, `RECORDED`, `APPROVED`.
-
-### Path Safety
-
-API endpoints use `safe_filename()` (raises `ValueError` on invalid input) and `sanitize_filename()` for user-provided names. `ProjectStore._sanitize_id()` strips path traversal characters (`/`, `\`, `..`).
+`ProjectStore` persists projects to `projects/{id}/project.json` with `audio/`, `video/`, `data/` subdirectories. Path traversal blocked via `_sanitize_id()` (strips `/`, `\`, `..`). API endpoints use `safe_filename()` (raises `ValueError`) and `sanitize_filename()` for user-provided names.
 
 ## Testing Conventions
 
