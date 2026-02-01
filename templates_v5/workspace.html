@@ -28,13 +28,28 @@
     .editor-split.view-split .raw-pane { flex: 1; border-right: 1px solid var(--border-color); }
     .editor-split.view-split .preview-pane { flex: 1; }
 
-    .raw-pane { display: flex; flex-direction: column; min-width: 0; position: relative; }
+    .raw-pane { display: flex; flex-direction: column; min-width: 0; position: relative; transition: flex 0.3s ease, width 0.3s ease, min-width 0.3s ease, opacity 0.2s ease; }
+    .raw-pane.collapsed { flex: 0 0 0 !important; width: 0 !important; min-width: 0 !important; overflow: hidden; opacity: 0; border: none; padding: 0; }
+    .raw-pane-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+    .raw-pane-toolbar .pane-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .collapse-raw-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); cursor: pointer; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+    .collapse-raw-btn:hover { background: var(--bg-card); color: var(--text-primary); }
+    .raw-pane-expand-btn { display: none; writing-mode: vertical-rl; text-orientation: mixed; padding: 12px 6px; background: var(--bg-secondary); color: var(--text-muted); cursor: pointer; font-size: 11px; font-weight: 600; border-right: 1px solid var(--border-color); flex-shrink: 0; user-select: none; letter-spacing: 0.5px; }
+    .raw-pane-expand-btn:hover { background: var(--bg-card); color: var(--accent); }
+    .raw-pane-expand-btn.visible { display: flex; align-items: center; }
     #script-editor { flex: 1; width: 100%; background: var(--bg-primary); color: var(--text-primary); border: none; padding: 16px 20px; font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 13px; line-height: 1.6; resize: none; outline: none; }
     .editor-status { padding: 6px 16px; font-size: 12px; color: var(--text-muted); background: var(--bg-secondary); border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; flex-shrink: 0; }
 
-    .preview-pane { overflow-y: auto; background: var(--bg-primary); }
-    .preview-pane-inner { padding: 16px; }
+    .preview-pane { overflow-y: auto; background: var(--bg-primary); display: flex; flex-direction: column; }
+    .section-nav-bar { display: flex; gap: 4px; padding: 6px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); flex-shrink: 0; flex-wrap: wrap; }
+    .section-nav-bar button { padding: 3px 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-muted); cursor: pointer; }
+    .section-nav-bar button:hover { border-color: var(--accent); color: var(--accent); }
+    .section-nav-bar button.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .preview-pane-inner { padding: 16px; flex: 1; overflow-y: auto; }
     .empty-preview { color: var(--text-muted); font-size: 14px; text-align: center; padding: 60px 20px; }
+    .segment-card.sync-active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+    .line-indicator { position: absolute; right: 8px; top: 8px; font-size: 10px; color: var(--text-muted); background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 5; }
+    .line-indicator.visible { opacity: 1; }
 
     /* ===== Segment Cards ===== */
     .segment-card { background: var(--bg-secondary); border: 2px solid transparent; border-radius: var(--radius); margin-bottom: 12px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
@@ -219,11 +234,25 @@
         </div>
 
         <div class="editor-split view-split" id="editor-split">
-            <div class="raw-pane">
+            <div class="raw-pane" id="raw-pane">
+                <div class="raw-pane-toolbar">
+                    <span class="pane-label">Raw Script</span>
+                    <button class="collapse-raw-btn" onclick="collapseRawPane()" title="Collapse raw pane">&#9664; Hide</button>
+                </div>
                 <textarea id="script-editor" placeholder="Write or generate your WWHAA+IVQ script here...&#10;&#10;## HOOK&#10;...&#10;## OBJECTIVE&#10;...&#10;## CONTENT&#10;...&#10;## IVQ&#10;...&#10;## SUMMARY&#10;...&#10;## CTA&#10;...">{{ project.script_raw or '' }}</textarea>
+                <span class="line-indicator" id="line-indicator">Line 1</span>
                 <button class="ai-edit-btn" id="ai-edit-btn" onclick="openSelectionEditModal()">AI Edit</button>
             </div>
-            <div class="preview-pane">
+            <div class="raw-pane-expand-btn" id="raw-pane-expand-btn" onclick="expandRawPane()">&#9654; Raw</div>
+            <div class="preview-pane" id="preview-pane">
+                <div class="section-nav-bar" id="section-nav-bar">
+                    <button data-nav-section="hook" onclick="navToSection('hook')">Hook</button>
+                    <button data-nav-section="objective" onclick="navToSection('objective')">Objective</button>
+                    <button data-nav-section="content" onclick="navToSection('content')">Content</button>
+                    <button data-nav-section="ivq" onclick="navToSection('ivq')">IVQ</button>
+                    <button data-nav-section="summary" onclick="navToSection('summary')">Summary</button>
+                    <button data-nav-section="cta" onclick="navToSection('cta')">CTA</button>
+                </div>
                 <div class="preview-pane-inner" id="script-preview">
                     <div class="empty-preview">Write or generate a script to see the preview</div>
                 </div>
@@ -604,6 +633,128 @@ const editor = document.getElementById('script-editor');
 let parsedSegments = [];
 let selectedSegIdx = null;
 
+// =====================================================================
+// FEATURE A: COLLAPSIBLE RAW PANE
+// =====================================================================
+let rawPaneCollapsed = false;
+
+function collapseRawPane() {
+    const pane = document.getElementById('raw-pane');
+    const expandBtn = document.getElementById('raw-pane-expand-btn');
+    pane.classList.add('collapsed');
+    expandBtn.classList.add('visible');
+    rawPaneCollapsed = true;
+    localStorage.setItem('rawPaneCollapsed', 'true');
+}
+
+function expandRawPane() {
+    const pane = document.getElementById('raw-pane');
+    const expandBtn = document.getElementById('raw-pane-expand-btn');
+    pane.classList.remove('collapsed');
+    expandBtn.classList.remove('visible');
+    rawPaneCollapsed = false;
+    localStorage.setItem('rawPaneCollapsed', 'false');
+}
+
+// Restore collapsed state on load
+if (localStorage.getItem('rawPaneCollapsed') === 'true') {
+    document.getElementById('raw-pane').classList.add('collapsed');
+    document.getElementById('raw-pane-expand-btn').classList.add('visible');
+    rawPaneCollapsed = true;
+}
+
+// =====================================================================
+// FEATURE B: SCROLL SYNC (Preview → Raw)
+// =====================================================================
+let sectionLineMap = {};
+let scrollSyncObserver = null;
+
+function buildSectionLineMap(script) {
+    const lines = script.split('\n');
+    sectionLineMap = {};
+    const patterns = [
+        { re: /^##?\s*HOOK/i, name: 'hook' },
+        { re: /^##?\s*OBJECTIVE/i, name: 'objective' },
+        { re: /^##?\s*CONTENT/i, name: 'content' },
+        { re: /^##?\s*(IN-VIDEO QUESTION|IVQ)/i, name: 'ivq' },
+        { re: /^##?\s*SUMMARY/i, name: 'summary' },
+        { re: /^##?\s*(CALL TO ACTION|CTA)/i, name: 'cta' }
+    ];
+    lines.forEach((line, idx) => {
+        for (const { re, name } of patterns) {
+            if (re.test(line.trim())) {
+                sectionLineMap[name] = idx + 1;
+            }
+        }
+    });
+}
+
+function scrollRawEditorToLine(lineNumber) {
+    if (rawPaneCollapsed) return;
+    const lineHeight = 13 * 1.6; // font-size * line-height
+    const scrollTop = Math.max(0, (lineNumber - 1) * lineHeight - 40);
+    editor.scrollTo({ top: scrollTop, behavior: 'smooth' });
+    // Show line indicator
+    const indicator = document.getElementById('line-indicator');
+    if (indicator) {
+        indicator.textContent = 'Line ' + lineNumber;
+        indicator.classList.add('visible');
+        clearTimeout(indicator._hideTimer);
+        indicator._hideTimer = setTimeout(() => indicator.classList.remove('visible'), 2000);
+    }
+}
+
+function setupScrollSync() {
+    // Disconnect previous observer
+    if (scrollSyncObserver) scrollSyncObserver.disconnect();
+    const previewInner = document.getElementById('script-preview');
+    if (!previewInner) return;
+
+    scrollSyncObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && entry.intersectionRatio >= 0.3) {
+                const sectionName = entry.target.dataset.sectionName;
+                if (sectionName && sectionLineMap[sectionName] !== undefined) {
+                    scrollRawEditorToLine(sectionLineMap[sectionName]);
+                    // Update nav bar active state
+                    document.querySelectorAll('.section-nav-bar button').forEach(b => b.classList.remove('active'));
+                    const navBtn = document.querySelector(`.section-nav-bar button[data-nav-section="${sectionName}"]`);
+                    if (navBtn) navBtn.classList.add('active');
+                    // Update card active state
+                    document.querySelectorAll('.segment-card').forEach(c => c.classList.remove('sync-active'));
+                    entry.target.classList.add('sync-active');
+                }
+            }
+        });
+    }, {
+        root: previewInner,
+        threshold: 0.3
+    });
+
+    previewInner.querySelectorAll('.segment-card[data-section-name]').forEach(card => {
+        scrollSyncObserver.observe(card);
+    });
+}
+
+function navToSection(sectionName) {
+    // Scroll preview pane to the section card
+    const card = document.querySelector(`.segment-card[data-section-name="${sectionName}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Scroll raw editor to the section line
+    if (sectionLineMap[sectionName] !== undefined) {
+        scrollRawEditorToLine(sectionLineMap[sectionName]);
+    }
+    // Update nav bar active state
+    document.querySelectorAll('.section-nav-bar button').forEach(b => b.classList.remove('active'));
+    const navBtn = document.querySelector(`.section-nav-bar button[data-nav-section="${sectionName}"]`);
+    if (navBtn) navBtn.classList.add('active');
+}
+
+// Build line map on editor changes
+editor.addEventListener('input', () => { buildSectionLineMap(editor.value); });
+// Build initial line map
+buildSectionLineMap(editor.value);
+
 // ===== View Toggle =====
 function setView(mode) {
     const split = document.getElementById('editor-split');
@@ -670,16 +821,18 @@ function renderPreview() {
     if (metaTable) html += `<div style="margin-bottom: 16px; font-size: 13px; opacity: 0.7;">${renderMd(metaTable)}</div>`;
     sections.forEach((sec, i) => {
         const labelClass = sec.name.toLowerCase().replace(/\s+/g, '');
+        const sectionKey = sec.name === 'CALL TO ACTION' ? 'cta' : sec.name.toLowerCase().replace(/\s+/g, '');
         const selected = selectedSegIdx === i ? ' selected' : '';
         const title = sec.subtitle || sec.name;
         const words = sec.content.split(/\s+/).filter(w => w).length;
         const secs = Math.round(words / 2.5);
         const durStr = secs < 60 ? `~${secs}s` : `~${Math.floor(secs/60)}m ${secs%60}s`;
-        html += `<div class="segment-card${selected}" data-seg-idx="${i}" onclick="selectSegment(${i})">
+        const lineNum = sectionLineMap[sectionKey] || '';
+        html += `<div class="segment-card${selected}" data-seg-idx="${i}" data-section-name="${sectionKey}" onclick="selectSegment(${i})">
             <div class="segment-card-header">
                 <span class="seg-label ${labelClass}">${escapeHtml(sec.name)}</span>
                 <span class="seg-card-title">${escapeHtml(title)}</span>
-                <span class="seg-card-dur">${durStr}</span>
+                <span class="seg-card-dur">${durStr}${lineNum ? ' | L' + lineNum : ''}</span>
                 <button class="btn-ai-seg" onclick="event.stopPropagation(); selectSegment(${i}); openAIHelper()">AI</button>
             </div>
             <div class="segment-card-body">${renderMd(sec.content)}</div>
@@ -687,6 +840,8 @@ function renderPreview() {
     });
     container.innerHTML = html;
     window._previewSections = sections;
+    // Setup scroll sync observer after rendering cards
+    setupScrollSync();
 }
 
 // ===== Segment Selection & AI Helper =====
@@ -694,7 +849,14 @@ function selectSegment(idx) {
     selectedSegIdx = idx;
     document.querySelectorAll('.segment-card').forEach(c => c.classList.remove('selected'));
     const card = document.querySelector(`[data-seg-idx="${idx}"]`);
-    if (card) card.classList.add('selected');
+    if (card) {
+        card.classList.add('selected');
+        // Scroll sync: scroll raw editor to matching section line
+        const sectionName = card.dataset.sectionName;
+        if (sectionName && sectionLineMap[sectionName] !== undefined) {
+            scrollRawEditorToLine(sectionLineMap[sectionName]);
+        }
+    }
 }
 
 function openAIHelper() {
